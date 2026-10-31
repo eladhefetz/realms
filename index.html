@@ -85,7 +85,7 @@ label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
 .sw2.sel{border-color:var(--gold);color:var(--ink)}
 .sw2 i{display:block;width:30px;height:30px;margin:0 auto 4px;border-radius:6px;box-shadow:inset 0 -6px 0 rgba(0,0,0,.25)}
 .tools{display:flex;gap:6px}
-.tools button{flex:1;padding:9px 6px;font-size:13px}
+.tools button{flex:1;padding:9px 4px;font-size:13px;white-space:nowrap}
 .tools button.on{background:linear-gradient(#e8c66a,#c9a24a);color:#1b1408;border:none;font-weight:700}
 #duel{position:fixed;inset:0;z-index:25;background:radial-gradient(ellipse at 50% 30%,#1f3524,#070b08 75%);display:none;flex-direction:column;padding:16px;padding-top:calc(16px + env(safe-area-inset-top))}
 .dhead{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--quiet)}
@@ -241,7 +241,28 @@ const MATS = {
   crystal: {name:'Crystal', color:'#a66bff', price:15, glow:true}
 };
 const PLOT = 16, PLOT_H = 12;
-const prestigeOf = l => l.creation ? Object.values(l.creation.blocks).reduce((t, m) => t + MATS[m].price, 0) : 0;
+const PIECES = {
+  block:  {name:'Block',  icon:'⬛', units:1},
+  slab:   {name:'Floor',  icon:'▬', units:1},
+  carpet: {name:'Carpet', icon:'🟫', units:1},
+  stairs: {name:'Stairs', icon:'📶', units:1},
+  roof:   {name:'Roof',   icon:'🔺', units:1},
+  pillar: {name:'Pillar', icon:'🏛️', units:1},
+  fence:  {name:'Fence',  icon:'🚧', units:1},
+  window: {name:'Window', icon:'🪟', units:1},
+  door:   {name:'Door',   icon:'🚪', units:2, tall:true},
+  table:  {name:'Table',  icon:'🪵', decor:true, price:6},
+  chair:  {name:'Chair',  icon:'🪑', decor:true, price:4},
+  lamp:   {name:'Lamp',   icon:'💡', decor:true, price:10},
+  plant:  {name:'Plant',  icon:'🪴', decor:true, price:3},
+  bed:    {name:'Bed',    icon:'🛏️', decor:true, price:12},
+  chest:  {name:'Chest',  icon:'🧰', decor:true, price:8},
+  banner: {name:'Banner', icon:'🚩', decor:true, price:8}
+};
+const pval = v => typeof v === 'string' ? {p:'block', m:v, r:0} : v;
+const pieceCost = v => { v = pval(v); if(!v || v.p === '_') return null; const P = PIECES[v.p]; return P.decor ? {decor:v.p, n:1} : {mat:v.m, n:P.units}; };
+const pieceValue = v => { v = pval(v); if(!v || v.p === '_') return 0; const P = PIECES[v.p]; return P.decor ? P.price : MATS[v.m].price*P.units; };
+const prestigeOf = l => l.creation ? Object.values(l.creation.blocks).reduce((t, v) => t + pieceValue(v), 0) : 0;
 const prestigeBonus = l => Math.min(5, Math.floor(prestigeOf(l)/100));
 const has = (l, k) => !!(l.builds && l.builds.includes(k));
 const slotsOf = l => l.fortress ? 5 : 3;
@@ -597,7 +618,7 @@ function updateHud(){
   else if(S.modeCooldown > 0){ mb.className = 'shield'; mb.textContent = '⏳ ' + Math.ceil(S.modeCooldown) + 's'; }
   else if(S.mode === 'alert'){ mb.className = 'alert'; mb.textContent = '⚡ Alert'; }
   else { mb.className = 'shield'; mb.textContent = '🛡️ Shielded'; }
-  store.set('player', {name:p.name, fac:p.fac, coins:p.coins, rank:p.rank, by:p.by, weapons:p.weapons, weapon:p.weapon, mats:p.mats, realms:Object.keys(S.realms).filter(k => S.realms[k].unlocked)});
+  store.set('player', {name:p.name, fac:p.fac, coins:p.coins, rank:p.rank, by:p.by, weapons:p.weapons, weapon:p.weapon, mats:p.mats, decor:p.decor, realms:Object.keys(S.realms).filter(k => S.realms[k].unlocked)});
   $('#realmBtn').textContent = REALMS[S.realm].icon + ' Realm';
 }
 
@@ -690,7 +711,7 @@ function signupWorld(){
 function startGame(world, kind){
   S.world = world; S.worldKind = kind;
   const pd = S.pending;
-  S.player = {name:pd.name, fac:pd.fac, by:pd.by, coins:pd.coins ?? 150, rank:pd.rank ?? 0, weapons:pd.weapons || ['bow'], mats:pd.mats || null, weapon:pd.weapon || 'bow', x:world.spawn[0], y:world.spawn[1], rx:world.spawn[0], ry:world.spawn[1], linked:true, tx:null, ty:null, dir:0, speedSamples:[]};
+  S.player = {name:pd.name, fac:pd.fac, by:pd.by, coins:pd.coins ?? 150, rank:pd.rank ?? 0, weapons:pd.weapons || ['bow'], mats:pd.mats || null, decor:pd.decor || null, weapon:pd.weapon || 'bow', x:world.spawn[0], y:world.spawn[1], rx:world.spawn[0], ry:world.spawn[1], linked:true, tx:null, ty:null, dir:0, speedSamples:[]};
   S.cam.x = S.player.x; S.cam.y = S.player.y;
   S.realm = 'forest';
   S.realms = {forest:{unlocked:true, landmarks:makeLandmarks(world, 'forest')}, cyber:{unlocked:false, landmarks:null}, kingdom:{unlocked:false, landmarks:null}};
@@ -734,7 +755,7 @@ function showRules(){
     <li><span>🏰</span><div><b>Land.</b> Claim free landmarks, take rivals' landmarks, or win them as a team. Owned land pays coins. Team land is split into shares you can sell or duel for.</div></li>
     <li><span>⚠️</span><div><b>Raids.</b> Your land gets raided, always with a countdown. Place a ward or defend it in person, or it becomes corrupted and unowned. Raids happen even in Shielded mode.</div></li>
     <li><span>🔨</span><div><b>Build.</b> On land you own, build up to 3 structures (5 on a fortress): Watchtower, Mint, Wall, Barracks, Ward Stone. They stay with the land: a rival who takes it gets them, a raid that corrupts it destroys them.</div></li>
-    <li><span>🎨</span><div><b>Studio.</b> On land you own, buy materials with coins and build anything, block by block. Creations add <b>prestige</b> (+coins) and stay with the land; a raid that corrupts the land crumbles about a third.</div></li>
+    <li><span>🎨</span><div><b>Studio.</b> On land you own, buy materials with coins and build anything: blocks, floors, stairs, roofs, windows, doors, fences, plus decor like tables, lamps and beds. Creations add <b>prestige</b> (+coins) and stay with the land; a raid that corrupts the land crumbles about a third.</div></li>
     <li><span>🤝</span><div><b>Allies.</b> Team up for a bonus, reinforce allied land (blocks rival factions for 3 minutes), and call allies into battles. ☠ Fortresses can only be taken by a team.</div></li>
     <li><span>📈</span><div><b>Rank (⚔️).</b> Wins add rank. Losing to a player or keeper costs 5; declining a challenge costs 3. Ties go to the defender. Rank unlocks weapons, extends reach and adds force.</div></li>
     <li><span>🪙</span><div><b>Coins.</b> Earned by playing; spent on wards, re-rolls, summons and weapons you've unlocked. Money never buys rank.</div></li>
@@ -885,7 +906,7 @@ function openLandmark(l){
   else actions = `<button class="primary" data-a="battle">🏹 Battle the keeper (needs ~${keeperArmor(l)} force)</button><button data-a="challenge">🎲 Duel the keeper (mini-game)</button>`;
   const sh = sheet(`<h2>${esc(l.name)}</h2>
     <div class="kv"><span>Keeper</span><span>${owner}</span></div>${extra}
-    ${l.creation && Object.keys(l.creation.blocks).length ? `<div class="kv"><span>Creation</span><span>${Object.keys(l.creation.blocks).length} blocks · prestige ${prestigeOf(l)}</span></div>` : ''}
+    ${l.creation && blockCount(l) ? `<div class="kv"><span>Creation</span><span>${blockCount(l)} pieces · prestige ${prestigeOf(l)}</span></div>` : ''}
     ${l.builds && l.builds.length ? `<div class="kv"><span>Built</span><span>${l.builds.map(k => STRUCTS[k].icon + ' ' + STRUCTS[k].name).join(', ')}</span></div>` : ''}
     <div class="kv"><span>Distance</span><span>${d} m</span></div>
     ${mine ? `<div class="kv"><span>Your income</span><span>+${(myShare(l)*((l.fortress ? 3 : 1) + (has(l, 'mint') ? 1 : 0) + prestigeBonus(l))).toFixed(1)} 🪙 / 10 s</span></div>` : ''}
@@ -1175,7 +1196,7 @@ function resolveRaid(){
   const l = S.raid.lm; S.raid = null; S.nextRaidIn = 60 + Math.random()*50;
   if(l.ward > 0){ S.player.coins += 10; notify(`🔷 Your ward held! ${l.name} is safe. +10 🪙`, 'good'); }
   else if(has(l, 'wardstone') && !(l.wsAt > S.t)){ l.wsAt = S.t + 600; notify(`💎 Your Ward Stone blocked the raid on ${l.name}. It recharges in 10 minutes.`, 'good'); }
-  else if(isMine(l)){ if(l.creation){ const keys = Object.keys(l.creation.blocks).filter(() => Math.random() < 1/3); keys.forEach(k => delete l.creation.blocks[k]); creationChanged(l); if(keys.length) setTimeout(() => notify(`🧱 ${keys.length} blocks of your creation crumbled in the raid.`, 'bad'), 2600); } const lost = (l.builds || []).length; l.builds = []; if(G3) G3.lmDirty = true; if(lost) setTimeout(() => notify(`🔥 ${lost} structure${lost > 1 ? 's were' : ' was'} destroyed in the raid.`, 'bad'), 1500); l.corrupted = true; l.owner = null; l.fac = null; l.team = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} was overrun and is now corrupted. Cleanse it to win it back. −5 ⚔️`, 'bad'); }
+  else if(isMine(l)){ if(l.creation){ const keys = Object.keys(l.creation.blocks).filter(k => pval(l.creation.blocks[k]).p !== '_' && Math.random() < 1/3); keys.forEach(k => { const v = pval(l.creation.blocks[k]); delete l.creation.blocks[k]; if(PIECES[v.p] && PIECES[v.p].tall){ const [x, y, z] = k.split(',').map(Number); delete l.creation.blocks[`${x},${y + 1},${z}`]; } }); creationChanged(l); if(keys.length) setTimeout(() => notify(`🧱 ${keys.length} blocks of your creation crumbled in the raid.`, 'bad'), 2600); } const lost = (l.builds || []).length; l.builds = []; if(G3) G3.lmDirty = true; if(lost) setTimeout(() => notify(`🔥 ${lost} structure${lost > 1 ? 's were' : ' was'} destroyed in the raid.`, 'bad'), 1500); l.corrupted = true; l.owner = null; l.fac = null; l.team = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} was overrun and is now corrupted. Cleanse it to win it back. −5 ⚔️`, 'bad'); }
   updateHud(); renderRaidbar();
 }
 
@@ -1430,7 +1451,7 @@ function init3D(){
     geo:{base:new THREE.CylinderGeometry(3, 3.8, 1.2, 10), pillar:new THREE.BoxGeometry(1.8, 7, 1.8), orb:new THREE.SphereGeometry(1.5, 14, 10), ring:new THREE.TorusGeometry(6, .35, 6, 32), ward:new THREE.TorusGeometry(8.5, .25, 6, 40), en:new THREE.SphereGeometry(2.6, 12, 10), eye:new THREE.SphereGeometry(.45, 8, 6)}};
   addEventListener('resize', () => { renderer.setSize(W, H, false); camera.aspect = W/H; camera.updateProjectionMatrix(); });
 }
-function disposeGroup(g){ const shared = G3 ? Object.values(G3.geo) : []; g.traverse(o => { if(o.geometry && !shared.includes(o.geometry)) o.geometry.dispose(); if(o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); }); g.clear(); }
+function disposeGroup(g){ const shared = G3 ? Object.values(G3.geo) : []; g.traverse(o => { if(o.geometry && !o.userData.shared && !shared.includes(o.geometry)) o.geometry.dispose(); if(o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); }); g.clear(); }
 const openPts = pts => (pts.length > 2 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) ? pts.slice(0, -1) : pts;
 function ribbonGeo(lines, y, widthScale = 1){
   const THREE = T3, pos = [], idx = [];
@@ -1614,124 +1635,213 @@ function render3D(){
 
 /* ---------- building studio (voxel creations on owned land) ---------- */
 async function ensureThree(){ if(T3) return true; toast('Loading the 3D engine…'); try{ T3 = await import(THREE_URL); return true; }catch(e){ toast('3D could not load here.', 'bad'); return false; } }
+const blockCount = l => l.creation ? Object.values(l.creation.blocks).filter(v => pval(v).p !== '_').length : 0;
+function pieceColor(part, v, fac){ return part.c === 'mat' ? MATS[v.m].color : part.c === 'glass' ? MATS.glass.color : part.c === 'faction' ? fac : part.c; }
 function creationChanged(l){
   const c = l.creation; c.ver = (c.ver || 0) + 1;
-  const cv2 = document.createElement('canvas'); cv2.width = cv2.height = PLOT; const g = cv2.getContext('2d'), top = {};
-  for(const [k, m] of Object.entries(c.blocks)){ const [x, y, z] = k.split(',').map(Number), kk = x + ',' + z; if(!top[kk] || top[kk].y < y) top[kk] = {y, m}; }
-  for(const [kk, v] of Object.entries(top)){ const [x, z] = kk.split(',').map(Number); g.fillStyle = MATS[v.m].color; g.fillRect(x, z, 1, 1); g.fillStyle = `rgba(255,255,255,${Math.min(.35, v.y*.03)})`; g.fillRect(x, z, 1, 1); }
-  c.thumb = Object.keys(c.blocks).length ? cv2 : null;
+  const cv2 = document.createElement('canvas'); cv2.width = cv2.height = PLOT; const g = cv2.getContext('2d'), top = {}, fac = l.fac ? FAC(l.fac).color : '#e8c66a';
+  for(const [k, raw] of Object.entries(c.blocks)){ const v = pval(raw); if(v.p === '_') continue; const [x, y, z] = k.split(',').map(Number), kk = x + ',' + z; if(!top[kk] || top[kk].y < y) top[kk] = {y, v}; }
+  for(const [kk, t] of Object.entries(top)){ const [x, z] = kk.split(',').map(Number), parts = pieceParts(t.v.p); g.fillStyle = pieceColor(parts[0], t.v, fac); g.fillRect(x, z, 1, 1); g.fillStyle = `rgba(255,255,255,${Math.min(.35, t.y*.03)})`; g.fillRect(x, z, 1, 1); }
+  c.thumb = blockCount(l) ? cv2 : null;
 }
-function voxelMeshes(blocks, group){
+// geometry for each piece (front faces +z; rotation turns it in quarter steps)
+const PGEO = {};
+function pieceParts(p){
+  if(PGEO[p]) return PGEO[p];
+  const THREE = T3;
+  const box = (w, h, d, x, y, z) => { const g = new THREE.BoxGeometry(w, h, d).toNonIndexed(); g.translate(x, y, z); return g; };
+  const cyl = (r, h, x, y, z, seg = 10) => { const g = new THREE.CylinderGeometry(r, r, h, seg).toNonIndexed(); g.translate(x, y, z); return g; };
+  const ball = (r, x, y, z) => { const g = new THREE.IcosahedronGeometry(r, 1).toNonIndexed(); g.translate(x, y, z); return g; };
+  const merge = (...gs) => { const pos = [], nor = []; gs.forEach(g => { pos.push(...g.attributes.position.array); nor.push(...g.attributes.normal.array); g.dispose(); }); const m = new THREE.BufferGeometry(); m.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); m.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3)); return m; };
+  const wedge = () => { const A = [-.5, -.5, .5], B = [.5, -.5, .5], C = [.5, -.5, -.5], D = [-.5, -.5, -.5], E = [-.5, .5, -.5], F = [.5, .5, -.5];
+    const tri = [A, B, F, A, F, E, D, F, C, D, E, F, A, E, D, B, C, F, A, D, C, A, C, B].flat(); const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(tri, 3)); g.computeVertexNormals(); return g; };
+  const legs = (w, h, y, c) => [-1, 1].flatMap(a => [-1, 1].map(b => box(.07, h, .07, a*w, y, b*w)));
+  const P = {
+    block:  [{g:box(1, 1, 1, 0, 0, 0), c:'mat'}],
+    slab:   [{g:box(1, .25, 1, 0, -.375, 0), c:'mat'}],
+    carpet: [{g:box(1, .05, 1, 0, -.475, 0), c:'mat'}],
+    stairs: [{g:merge(box(1, .5, 1, 0, -.25, 0), box(1, .5, .5, 0, .25, -.25)), c:'mat'}],
+    roof:   [{g:wedge(), c:'mat'}],
+    pillar: [{g:merge(cyl(.22, 1, 0, 0, 0, 10), box(.5, .1, .5, 0, -.45, 0), box(.5, .1, .5, 0, .45, 0)), c:'mat'}],
+    fence:  [{g:merge(box(.14, 1, .14, 0, 0, 0), box(1, .09, .07, 0, .25, 0), box(1, .09, .07, 0, -.15, 0)), c:'mat'}],
+    window: [{g:merge(box(1, .12, .16, 0, .44, 0), box(1, .12, .16, 0, -.44, 0), box(.12, .76, .16, -.44, 0, 0), box(.12, .76, .16, .44, 0, 0), box(.05, .76, .1, 0, 0, 0)), c:'mat'}, {g:box(.76, .76, .04, 0, 0, 0), c:'glass'}],
+    door:   [{g:merge(box(.92, 1.96, .14, 0, .48, 0), box(.92, .06, .16, 0, .3, 0), box(.92, .06, .16, 0, .9, 0)), c:'mat'}, {g:box(.1, .1, .1, .3, .45, .1), c:'#e8c14a'}],
+    table:  [{g:merge(box(1, .08, 1, 0, .2, 0), ...legs(.42, .62, -.13)), c:'#8a5a2b'}],
+    chair:  [{g:merge(box(.55, .08, .55, 0, -.1, 0), box(.55, .55, .08, 0, .2, -.24), ...legs(.22, .4, -.32)), c:'#9a6a3a'}],
+    lamp:   [{g:merge(cyl(.05, .82, 0, -.08, 0, 6), box(.3, .06, .3, 0, -.47, 0)), c:'#3a3a3a'}, {g:ball(.17, 0, .38, 0), c:'#ffd27a', glow:true}],
+    plant:  [{g:box(.4, .3, .4, 0, -.35, 0), c:'#8b5a3c'}, {g:ball(.36, 0, .06, 0), c:'#4f9a3a'}],
+    bed:    [{g:box(.95, .25, .95, 0, -.37, 0), c:'#7a4a2a'}, {g:box(.86, .12, .86, 0, -.19, 0), c:'#f2efe6'}, {g:box(.86, .07, .55, 0, -.11, .16), c:'faction'}],
+    chest:  [{g:box(.8, .55, .55, 0, -.22, 0), c:'#7a4a22'}, {g:box(.82, .08, .57, 0, -.04, 0), c:'#e8c14a'}],
+    banner: [{g:cyl(.04, 1, -.3, 0, 0, 6), c:'#5a4a3a'}, {g:box(.5, .7, .03, 0, .1, 0), c:'faction'}]
+  };
+  for(const k of Object.keys(P)) PGEO[k] = P[k];
+  return PGEO[p];
+}
+function voxelMeshes(blocks, group, fac = '#e8c66a'){
   const THREE = T3, by = {};
-  for(const [k, m] of Object.entries(blocks)) (by[m] = by[m] || []).push(k.split(',').map(Number));
-  const box = new THREE.BoxGeometry(1, 1, 1), M = new THREE.Matrix4(), out = {};
-  for(const [m, list] of Object.entries(by)){
-    const d = MATS[m], mat = new THREE.MeshLambertMaterial({color:d.color, transparent:!!d.glass, opacity:d.glass ? .55 : 1, emissive:d.glow ? d.color : '#000000', emissiveIntensity:d.glow ? .7 : 0});
-    const im = new THREE.InstancedMesh(box, mat, list.length);
-    list.forEach((p, i) => { M.makeTranslation(p[0] - PLOT/2 + .5, p[1] + .5, p[2] - PLOT/2 + .5); im.setMatrixAt(i, M); });
-    im.userData.list = list; im.userData.mat = m; group.add(im); out[m] = im;
+  for(const [k, raw] of Object.entries(blocks)){
+    const v = pval(raw); if(v.p === '_') continue;
+    pieceParts(v.p).forEach((part, i) => { const col = pieceColor(part, v, fac), key = `${v.p}|${i}|${col}|${part.c === 'glass' ? 'g' : ''}|${part.glow || (part.c === 'mat' && MATS[v.m].glow) ? 'e' : ''}`; (by[key] = by[key] || {part, col, list:[], vals:[]}); by[key].list.push(k); by[key].vals.push(v); });
+  }
+  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), P = new THREE.Vector3(), Sc = new THREE.Vector3(1, 1, 1), Y = new THREE.Vector3(0, 1, 0), out = [];
+  for(const [key, b] of Object.entries(by)){
+    const glass = key.split('|')[3] === 'g', glow = key.split('|')[4] === 'e';
+    const mat = new THREE.MeshLambertMaterial({color:b.col, side:THREE.DoubleSide, transparent:glass, opacity:glass ? .45 : 1, emissive:glow ? b.col : '#000000', emissiveIntensity:glow ? .8 : 0});
+    const im = new THREE.InstancedMesh(b.part.g, mat, b.list.length);
+    b.list.forEach((k, i) => { const [x, y, z] = k.split(',').map(Number); P.set(x - PLOT/2 + .5, y + .5, z - PLOT/2 + .5); Q.setFromAxisAngle(Y, (b.vals[i].r || 0)*Math.PI/2); M.compose(P, Q, Sc); im.setMatrixAt(i, M); });
+    im.userData.list = b.list; im.userData.shared = true; group.add(im); out.push(im);
   }
   return out;
 }
+function disposeVox(g){ g.traverse(o => { if(o.material) o.material.dispose(); }); g.clear(); }
 function creationMesh(l, r){
-  if(r.cg){ G3.dyn.remove(r.cg); disposeGroup(r.cg); r.cg = null; }
+  if(r.cg){ G3.dyn.remove(r.cg); disposeVox(r.cg); r.cg = null; }
   r.cver = l.creation ? l.creation.ver : 0;
-  const blocks = l.creation ? l.creation.blocks : {}, keys = Object.keys(blocks);
+  const blocks = l.creation ? l.creation.blocks : {}, keys = Object.keys(blocks).filter(k => pval(blocks[k]).p !== '_');
   r.gr.children[0].visible = r.gr.children[1].visible = !keys.length;
-  let top = 0; keys.forEach(k => { top = Math.max(top, +k.split(',')[1] + 1); });
+  let top = 0; Object.keys(blocks).forEach(k => { top = Math.max(top, +k.split(',')[1] + 1); });
   r.orb.position.y = keys.length ? (top + 4)/1.8 : 9.3; r.glow.position.y = r.orb.position.y;
   if(!keys.length) return;
-  const cg = new T3.Group(); voxelMeshes(blocks, cg); cg.position.set(l.x, 0, l.y); G3.dyn.add(cg); r.cg = cg;
+  const cg = new T3.Group(); voxelMeshes(blocks, cg, l.fac ? FAC(l.fac).color : '#e8c66a'); cg.position.set(l.x, 0, l.y); G3.dyn.add(cg); r.cg = cg;
 }
 let ST = null;
 async function openStudio(l){
   if(!(await ensureThree())) return;
   const THREE = T3, p = S.player;
   if(!p.mats){ p.mats = {wood:40, stone:40, moss:20}; setTimeout(() => toast('🎁 Starter materials: 40 wood, 40 stone, 20 moss.', 'gold'), 600); }
+  if(!p.decor){ p.decor = {table:1, chair:2, lamp:2, plant:2}; setTimeout(() => toast('🎁 Starter decor: a table, 2 chairs, 2 lamps, 2 plants.', 'gold'), 1600); }
   l.creation = l.creation || {blocks:{}, ver:0};
+  const fac = l.fac ? FAC(l.fac).color : '#e8c66a';
   const el = $('#studio'); el.style.display = 'flex'; S.busy = true;
   el.innerHTML = `<div class="stbar"><div class="grow"><b style="font-family:Cinzel,serif;color:var(--gold)">🎨 ${esc(l.name)}</b><br><small style="color:var(--quiet)" id="stInfo"></small></div><button id="stHelp">?</button><button class="primary" id="stDone">Done</button></div>
     <canvas id="stc"></canvas>
-    <div class="stbot"><div class="pal" id="stPal"></div>
-      <div class="tools"><button id="tPlace" class="on">➕ Place</button><button id="tErase">⛏ Remove</button><button id="tUndo">↶ Undo</button><button id="tBuy">🛒 Buy</button></div></div>`;
+    <div class="stbot">
+      <div class="tools" style="margin-bottom:6px"><button data-tab="mat">🧱 Materials</button><button data-tab="shape">📐 Shapes</button><button data-tab="decor">🪑 Decor</button></div>
+      <div class="pal" id="stPal"></div>
+      <div id="stSel" style="font-size:12px;color:var(--quiet);margin:-2px 2px 6px"></div>
+      <div class="tools"><button id="tPlace" class="on">➕ Place</button><button id="tErase">⛏ Remove</button><button id="tTurn">↻ Turn</button><button id="tUndo">↶</button><button id="tBuy">🛒</button></div></div>`;
   const c = $('#stc'), box = c.getBoundingClientRect(), BW = box.width, BH = box.height;
   const renderer = new THREE.WebGLRenderer({canvas:c, antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); renderer.setSize(BW, BH, false);
   const scene = new THREE.Scene(); scene.background = new THREE.Color(THEMES[S.realm].bg); scene.fog = new THREE.Fog(THEMES[S.realm].bg, 60, 140);
-  const camera = new THREE.PerspectiveCamera(45, BW/BH, .5, 400);
+  const camera = new THREE.PerspectiveCamera(45, BW/BH, .3, 400);
   scene.add(new THREE.HemisphereLight(0xffffff, 0x445544, 1.1)); const sun = new THREE.DirectionalLight(0xffffff, 1.3); sun.position.set(-20, 40, 15); scene.add(sun);
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(PLOT, PLOT), new THREE.MeshLambertMaterial({color:THEMES[S.realm].park})); ground.rotation.x = -Math.PI/2; scene.add(ground);
   const grid = new THREE.GridHelper(PLOT, PLOT, 0xffffff, 0xffffff); grid.material.transparent = true; grid.material.opacity = .18; grid.position.y = .01; scene.add(grid);
   const around = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshLambertMaterial({color:THEMES[S.realm].bg})); around.rotation.x = -Math.PI/2; around.position.y = -.02; scene.add(around);
-  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(.6, .6, 1, 12), new THREE.MeshBasicMaterial({color:l.fac ? FAC(l.fac).color : '#e8c66a'})); pillar.position.set(0, .5, 0); scene.add(pillar);
+  const stone = new THREE.Mesh(new THREE.CylinderGeometry(.6, .6, 1, 12), new THREE.MeshBasicMaterial({color:fac})); stone.position.set(0, .5, 0); scene.add(stone);
   const vg = new THREE.Group(); scene.add(vg);
-  ST = {l, renderer, scene, camera, vg, ground, yaw:.7, pitch:.75, dist:34, mode:'place', mat:Object.keys(p.mats).find(k => p.mats[k] > 0) || 'wood', undo:[], meshes:{}, alive:true};
-  const rebuild = () => { disposeGroup(vg); ST.meshes = voxelMeshes(l.creation.blocks, vg); creationChanged(l); info(); };
-  const info = () => { const n = Object.keys(l.creation.blocks).length; $('#stInfo').textContent = `${n} blocks · prestige ${prestigeOf(l)} (+${prestigeBonus(l)} 🪙/10 s) · 🪙 ${p.coins}`; };
-  const pal = () => { $('#stPal').innerHTML = Object.entries(MATS).map(([k, m]) => `<div class="sw2 ${k === ST.mat ? 'sel' : ''}" data-m="${k}"><i style="background:${m.color}${m.glass ? ';opacity:.6' : ''}"></i>${m.name}<br><b style="color:var(--ink)">${p.mats[k] || 0}</b></div>`).join(''); };
-  $('#stPal').onclick = e => { const d = e.target.closest('[data-m]'); if(!d) return; ST.mat = d.dataset.m; ST.mode = 'place'; setTool(); pal(); };
-  const setTool = () => { $('#tPlace').classList.toggle('on', ST.mode === 'place'); $('#tErase').classList.toggle('on', ST.mode === 'erase'); };
+  ST = {l, vg, ground, yaw:.7, pitch:.75, dist:30, mode:'place', tab:'mat', mat:Object.keys(p.mats).find(k => p.mats[k] > 0) || 'wood', piece:'block', undo:[], meshes:[], alive:true};
+  const B = l.creation.blocks;
+  const faceRot = () => (((Math.round(ST.yaw/(Math.PI/2))) % 4) + 4) % 4;
+  const rebuild = () => { disposeVox(vg); ST.meshes = voxelMeshes(B, vg, fac); creationChanged(l); info(); };
+  const info = () => { $('#stInfo').textContent = `${blockCount(l)} pieces · prestige ${prestigeOf(l)} (+${prestigeBonus(l)} 🪙/10 s) · 🪙 ${p.coins}`; };
+  const selText = () => { const P = PIECES[ST.piece]; $('#stSel').innerHTML = P.decor ? `Placing: <b style="color:var(--ink)">${P.icon} ${P.name}</b> · you have ${p.decor[ST.piece] || 0} · faces you` : `Placing: <b style="color:var(--ink)">${MATS[ST.mat].name} ${P.name}</b> · uses ${P.units} ${MATS[ST.mat].name.toLowerCase()} (you have ${p.mats[ST.mat] || 0})${P.units && ST.piece !== 'block' ? ' · faces you' : ''}`; };
+  const pal = () => {
+    el.querySelectorAll('[data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === ST.tab));
+    let h = '';
+    if(ST.tab === 'mat') h = Object.entries(MATS).map(([k, m]) => `<div class="sw2 ${k === ST.mat ? 'sel' : ''}" data-m="${k}"><i style="background:${m.color}${m.glass ? ';opacity:.6' : ''}"></i>${m.name}<br><b style="color:var(--ink)">${p.mats[k] || 0}</b></div>`).join('');
+    if(ST.tab === 'shape') h = Object.entries(PIECES).filter(([, P]) => !P.decor).map(([k, P]) => `<div class="sw2 ${k === ST.piece ? 'sel' : ''}" data-s="${k}"><i style="background:${MATS[ST.mat].color};display:flex;align-items:center;justify-content:center;font-size:18px">${P.icon}</i>${P.name}<br><small>${P.units} ${MATS[ST.mat].name.toLowerCase()}</small></div>`).join('');
+    if(ST.tab === 'decor') h = Object.entries(PIECES).filter(([, P]) => P.decor).map(([k, P]) => `<div class="sw2 ${k === ST.piece ? 'sel' : ''}" data-d="${k}"><i style="background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;font-size:20px">${P.icon}</i>${P.name}<br><b style="color:var(--ink)">${p.decor[k] || 0}</b></div>`).join('');
+    $('#stPal').innerHTML = h; selText();
+  };
+  el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { ST.tab = b.dataset.tab; pal(); });
+  $('#stPal').onclick = e => {
+    const d = e.target.closest('.sw2'); if(!d) return;
+    if(d.dataset.m){ ST.mat = d.dataset.m; if(PIECES[ST.piece].decor) ST.piece = 'block'; }
+    if(d.dataset.s) ST.piece = d.dataset.s;
+    if(d.dataset.d){ ST.piece = d.dataset.d; if(!(p.decor[ST.piece] > 0)) toast(`No ${PIECES[ST.piece].name.toLowerCase()}s left. Tap 🛒 to buy.`); }
+    ST.mode = 'place'; setTool(); pal();
+  };
+  const setTool = () => { $('#tPlace').classList.toggle('on', ST.mode === 'place'); $('#tErase').classList.toggle('on', ST.mode === 'erase'); $('#tTurn').classList.toggle('on', ST.mode === 'turn'); };
   $('#tPlace').onclick = () => { ST.mode = 'place'; setTool(); };
   $('#tErase').onclick = () => { ST.mode = 'erase'; setTool(); };
-  $('#tUndo').onclick = () => { const u = ST.undo.pop(); if(!u) return toast('Nothing to undo.'); if(u.op === 'add'){ delete l.creation.blocks[u.k]; p.mats[u.m] = (p.mats[u.m] || 0) + 1; } else { l.creation.blocks[u.k] = u.m; p.mats[u.m]--; } rebuild(); pal(); };
+  $('#tTurn').onclick = () => { ST.mode = 'turn'; setTool(); toast('Tap a piece to turn it a quarter.'); };
+  // every edit = list of [key, newValue|undefined]; inventory follows automatically
+  const apply = (changes, record = true) => {
+    const before = changes.map(([k]) => [k, B[k]]);
+    for(const [k, nv] of changes){ const old = B[k], oc = pieceCost(old), nc = pieceCost(nv);
+      if(oc){ if(oc.decor) p.decor[oc.decor] = (p.decor[oc.decor] || 0) + oc.n; else p.mats[oc.mat] = (p.mats[oc.mat] || 0) + oc.n; }
+      if(nc){ if(nc.decor) p.decor[nc.decor] -= nc.n; else p.mats[nc.mat] -= nc.n; }
+      if(nv === undefined) delete B[k]; else B[k] = nv; }
+    if(record) ST.undo.push(before);
+    rebuild(); pal();
+  };
+  $('#tUndo').onclick = () => { const u = ST.undo.pop(); if(!u) return toast('Nothing to undo.'); apply(u, false); };
   $('#tBuy').onclick = () => buyMats(() => { pal(); info(); updateHud(); });
   $('#stHelp').onclick = () => sheet(`<h2>Studio</h2><ul class="rules">
-      <li><span>👆</span><div><b>Place:</b> pick a material, then tap the ground or the side of a block to add a block there.</div></li>
-      <li><span>⛏</span><div><b>Remove:</b> tap a block to take it back into your materials.</div></li>
-      <li><span>🔄</span><div><b>Look around:</b> drag to rotate, pinch to zoom.</div></li>
-      <li><span>🛒</span><div><b>Buy:</b> materials cost coins. Rarer materials add more <b>prestige</b>.</div></li>
-      <li><span>🏆</span><div><b>Prestige</b> = total material value. Every 100 prestige adds +1 🪙 every 10 s from this land (max +5).</div></li>
-      <li><span>⚠️</span><div>Your creation stays with the land. A rival who takes it gets it; a raid that corrupts the land crumbles about a third of it.</div></li>
+      <li><span>🧱</span><div><b>Materials</b> set what a piece is made of; <b>Shapes</b> set its form: block, floor, carpet, stairs, roof, pillar, fence, window or door (2 high).</div></li>
+      <li><span>🪑</span><div><b>Decor</b> items (tables, chairs, lamps, plants, beds, chests, banners) are bought ready-made.</div></li>
+      <li><span>👆</span><div><b>Place:</b> tap the ground or a side of a piece. New pieces face you; <b>↻ Turn</b> rotates a piece.</div></li>
+      <li><span>⛏</span><div><b>Remove</b> returns the piece to your inventory. <b>↶</b> undoes.</div></li>
+      <li><span>🔄</span><div>Drag to look around, pinch to zoom.</div></li>
+      <li><span>🏆</span><div><b>Prestige</b> = value of what you built. Every 100 adds +1 🪙 every 10 s from this land (max +5).</div></li>
+      <li><span>⚠️</span><div>Your creation stays with the land. A rival who takes it gets it; a raid that corrupts the land crumbles about a third.</div></li>
     </ul><div class="row"><button class="primary" data-x="1">Got it</button></div>`).onclick = e => { if(e.target.closest('button')) closeSheet(); };
   $('#stDone').onclick = () => {
-    ST.alive = false; renderer.dispose(); disposeGroup(scene); el.style.display = 'none'; el.innerHTML = ''; S.busy = !!overlay; updateHud();
-    const n = Object.keys(l.creation.blocks).length; if(n) toast(`🏛️ ${l.name}: ${n} blocks, prestige ${prestigeOf(l)}.`, 'gold');
+    ST.alive = false; renderer.dispose(); disposeVox(vg); el.style.display = 'none'; el.innerHTML = ''; S.busy = !!overlay; updateHud();
+    const n = blockCount(l); if(n) toast(`🏛️ ${l.name}: ${n} pieces, prestige ${prestigeOf(l)}.`, 'gold');
     S.stats.studio = true;
   };
-  // input: drag rotates, pinch zooms, tap edits
   const pts = new Map(); let gst = null;
   c.addEventListener('pointerdown', e => { c.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY}); if(pts.size === 2){ const [a, b] = [...pts.values()]; gst = {pinch:true, d:dist(a.x, a.y, b.x, b.y), z:ST.dist}; } else gst = {moved:false}; });
   c.addEventListener('pointermove', e => { const q = pts.get(e.pointerId); if(!q || !gst) return; const dx = e.clientX - q.x, dy = e.clientY - q.y; q.x = e.clientX; q.y = e.clientY;
-    if(gst.pinch && pts.size === 2){ const [a, b] = [...pts.values()]; ST.dist = clamp(gst.z*gst.d/dist(a.x, a.y, b.x, b.y), 10, 80); return; }
+    if(gst.pinch && pts.size === 2){ const [a, b] = [...pts.values()]; ST.dist = clamp(gst.z*gst.d/dist(a.x, a.y, b.x, b.y), 6, 80); return; }
     if(!gst.moved && dist(e.clientX, e.clientY, q.sx, q.sy) > 8) gst.moved = true;
-    if(gst.moved){ ST.yaw -= dx*.008; ST.pitch = clamp(ST.pitch + dy*.006, .15, 1.45); } });
+    if(gst.moved){ ST.yaw -= dx*.008; ST.pitch = clamp(ST.pitch + dy*.006, .1, 1.45); } });
   const end = e => { const q = pts.get(e.pointerId); pts.delete(e.pointerId); if(gst && !gst.pinch && !gst.moved && q && e.type === 'pointerup') edit(e.clientX, e.clientY); if(!pts.size) gst = null; };
   c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
-  c.addEventListener('wheel', e => { ST.dist = clamp(ST.dist*(e.deltaY < 0 ? .9 : 1.1), 10, 80); e.preventDefault(); }, {passive:false});
-  const ray = new THREE.Raycaster();
+  c.addEventListener('wheel', e => { ST.dist = clamp(ST.dist*(e.deltaY < 0 ? .9 : 1.1), 6, 80); e.preventDefault(); }, {passive:false});
+  const ray = new THREE.Raycaster(), M4 = new THREE.Matrix4();
+  const owner = k => { const v = pval(B[k]); return v && v.p === '_' ? v.of : k; };
+  const cellsOf = k => { const v = pval(B[k]); if(!v) return [k]; if(PIECES[v.p] && PIECES[v.p].tall){ const [x, y, z] = k.split(',').map(Number); return [k, `${x},${y + 1},${z}`]; } return [k]; };
   function edit(sx, sy){
     const r = c.getBoundingClientRect(); ray.setFromCamera({x:(sx - r.left)/r.width*2 - 1, y:-((sy - r.top)/r.height*2 - 1)}, camera);
-    const hit = ray.intersectObjects([...Object.values(ST.meshes), ground], false)[0]; if(!hit) return;
+    const hit = ray.intersectObjects([...ST.meshes, ground], false)[0]; if(!hit) return;
     let cell = null, target = null;
-    if(hit.object !== ground){ const b = hit.object.userData.list[hit.instanceId]; target = b.join(','); const n = hit.face.normal; cell = [b[0] + Math.round(n.x), b[1] + Math.round(n.y), b[2] + Math.round(n.z)]; }
-    else { cell = [Math.floor(hit.point.x + PLOT/2), 0, Math.floor(hit.point.z + PLOT/2)]; }
-    if(ST.mode === 'erase'){
-      if(!target) return; const m = l.creation.blocks[target]; delete l.creation.blocks[target]; p.mats[m] = (p.mats[m] || 0) + 1; ST.undo.push({op:'del', k:target, m}); rebuild(); pal(); return;
-    }
-    const [x, y, z] = cell;
-    if(x < 0 || z < 0 || x >= PLOT || z >= PLOT || y < 0 || y >= PLOT_H) return toast(`The plot is ${PLOT}×${PLOT} blocks and ${PLOT_H} high.`);
+    if(hit.object !== ground){
+      target = owner(hit.object.userData.list[hit.instanceId]);
+      hit.object.getMatrixAt(hit.instanceId, M4); const n = hit.face.normal.clone().transformDirection(M4);
+      const [bx, by, bz] = hit.object.userData.list[hit.instanceId].split(',').map(Number);
+      const ax = Math.abs(n.x), ay = Math.abs(n.y), az = Math.abs(n.z);
+      cell = ay >= ax && ay >= az ? [bx, by + Math.sign(n.y), bz] : ax >= az ? [bx + Math.sign(n.x), by, bz] : [bx, by, bz + Math.sign(n.z)];
+    } else cell = [Math.floor(hit.point.x + PLOT/2), 0, Math.floor(hit.point.z + PLOT/2)];
+    if(ST.mode === 'erase'){ if(!target) return; return apply(cellsOf(target).map(k => [k, undefined])); }
+    if(ST.mode === 'turn'){ if(!target) return; const v = pval(B[target]); if(v.p === 'block') return toast('Plain blocks look the same every way.'); return apply([[target, {...v, r:((v.r || 0) + 1) % 4}]]); }
+    const P = PIECES[ST.piece], [x, y, z] = cell, k = x + ',' + y + ',' + z;
+    const inPlot = (yy) => x >= 0 && z >= 0 && x < PLOT && z < PLOT && yy >= 0 && yy < PLOT_H;
+    if(!inPlot(y) || (P.tall && !inPlot(y + 1))) return toast(`The plot is ${PLOT}×${PLOT} and ${PLOT_H} high.`);
     if(Math.abs(x - PLOT/2 + .5) < 1 && Math.abs(z - PLOT/2 + .5) < 1 && y < 1) return toast('Keep the center free for the landmark stone.');
-    const k = x + ',' + y + ',' + z; if(l.creation.blocks[k]) return;
-    if(!(p.mats[ST.mat] > 0)) return toast(`No ${MATS[ST.mat].name.toLowerCase()} left. Tap 🛒 Buy.`, 'bad');
-    p.mats[ST.mat]--; l.creation.blocks[k] = ST.mat; ST.undo.push({op:'add', k, m:ST.mat}); rebuild(); pal();
+    const up = `${x},${y + 1},${z}`;
+    if(B[k] || (P.tall && B[up])) return toast('That spot is taken.');
+    if(P.decor){ if(!(p.decor[ST.piece] > 0)) return toast(`No ${P.name.toLowerCase()}s left. Tap 🛒 to buy.`, 'bad'); }
+    else if((p.mats[ST.mat] || 0) < P.units) return toast(`Not enough ${MATS[ST.mat].name.toLowerCase()} (needs ${P.units}). Tap 🛒 to buy.`, 'bad');
+    const rot = faceRot();
+    const v = P.decor ? {p:ST.piece, r:rot} : ST.piece === 'block' ? ST.mat : {p:ST.piece, m:ST.mat, r:rot};
+    apply(P.tall ? [[k, v], [up, {p:'_', of:k}]] : [[k, v]]);
   }
+  ST.camera = camera; ST.rebuild = rebuild;
   rebuild(); pal(); setTool();
   const frame = () => {
     if(!ST || !ST.alive) return;
     camera.position.set(Math.sin(ST.yaw)*Math.cos(ST.pitch)*ST.dist, Math.sin(ST.pitch)*ST.dist + 2, Math.cos(ST.yaw)*Math.cos(ST.pitch)*ST.dist);
-    camera.lookAt(0, 3, 0); renderer.render(scene, camera); requestAnimationFrame(frame);
+    camera.lookAt(0, 2.5, 0); renderer.render(scene, camera); requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
-  if(!store.get('studioSeen')){ store.set('studioSeen', true); $('#stHelp').click(); }
+  if(!store.get('studioSeen2')){ store.set('studioSeen2', true); $('#stHelp').click(); }
 }
 function buyMats(after){
-  const p = S.player;
-  const sh = sheet(`<h2>Buy materials</h2><p>You have 🪙 ${p.coins}. Removing a block always returns it to you.</p><div class="stack">${Object.entries(MATS).map(([k, m]) => `<div class="pack"><div><b><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${m.color};vertical-align:-2px"></span> ${m.name}</b><br><small>${m.price} 🪙 per block · you have ${p.mats[k] || 0}</small></div><div style="display:flex;gap:6px"><button data-k="${k}" data-n="10" ${p.coins < m.price*10 ? 'disabled' : ''}>10 · ${m.price*10}</button><button data-k="${k}" data-n="50" ${p.coins < m.price*45 ? 'disabled' : ''}>50 · ${m.price*45}</button></div></div>`).join('')}</div>
-    <p class="note">50-block packs are 10% off.</p><div class="row"><button data-x="1">Done</button></div>`);
+  const p = S.player; p.decor = p.decor || {};
+  const sh = sheet(`<h2>Shop</h2><p>You have 🪙 ${p.coins}. Removing a piece always returns it to you.</p>
+    <h2 style="font-size:16px;margin-top:10px">Materials</h2><div class="stack" style="margin-top:6px">${Object.entries(MATS).map(([k, m]) => `<div class="pack"><div><b><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${m.color};vertical-align:-2px"></span> ${m.name}</b><br><small>${m.price} 🪙 each · you have ${p.mats[k] || 0}</small></div><div style="display:flex;gap:6px"><button data-k="${k}" data-n="10" ${p.coins < m.price*10 ? 'disabled' : ''}>10 · ${m.price*10}</button><button data-k="${k}" data-n="50" ${p.coins < m.price*45 ? 'disabled' : ''}>50 · ${m.price*45}</button></div></div>`).join('')}</div>
+    <p class="note">50-packs are 10% off.</p>
+    <h2 style="font-size:16px;margin-top:10px">Decor</h2><div class="stack" style="margin-top:6px">${Object.entries(PIECES).filter(([, P]) => P.decor).map(([k, P]) => `<div class="pack"><div><b>${P.icon} ${P.name}</b><br><small>${P.price} 🪙 each · you have ${p.decor[k] || 0}</small></div><div style="display:flex;gap:6px"><button data-dk="${k}" data-n="1" ${p.coins < P.price ? 'disabled' : ''}>1 · ${P.price}</button><button data-dk="${k}" data-n="5" ${p.coins < P.price*5 ? 'disabled' : ''}>5 · ${P.price*5}</button></div></div>`).join('')}</div>
+    <div class="row"><button data-x="1">Done</button></div>`);
   sh.onclick = e => {
     const b = e.target.closest('button'); if(!b) return; if(b.dataset.x){ closeSheet(); return after && after(); }
-    const k = b.dataset.k, n = +b.dataset.n, cost = MATS[k].price*(n === 50 ? 45 : 10);
-    if(p.coins < cost) return toast('Not enough coins.', 'bad');
-    p.coins -= cost; p.mats[k] = (p.mats[k] || 0) + n; updateHud(); toast(`+${n} ${MATS[k].name.toLowerCase()}`, 'good'); closeSheet(); buyMats(after);
+    const n = +b.dataset.n;
+    if(b.dataset.k){ const k = b.dataset.k, cost = MATS[k].price*(n === 50 ? 45 : 10); if(p.coins < cost) return toast('Not enough coins.', 'bad'); p.coins -= cost; p.mats[k] = (p.mats[k] || 0) + n; toast(`+${n} ${MATS[k].name.toLowerCase()}`, 'good'); }
+    if(b.dataset.dk){ const k = b.dataset.dk, cost = PIECES[k].price*n; if(p.coins < cost) return toast('Not enough coins.', 'bad'); p.coins -= cost; p.decor[k] = (p.decor[k] || 0) + n; toast(`+${n} ${PIECES[k].name.toLowerCase()}${n > 1 ? 's' : ''}`, 'good'); }
+    updateHud(); const scroll = sh.scrollTop; closeSheet(); buyMats(after); if(overlay) overlay.querySelector('.sheet').scrollTop = scroll;
   };
 }
 
