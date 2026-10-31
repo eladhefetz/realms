@@ -114,7 +114,7 @@ label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
   <button id="realmBtn">🌲 Realm</button>
   <button id="setBtn">⚙️</button>
   <div class="grow"></div>
-  <div id="zoom"><button id="recenter" title="Recenter">◎</button><button id="zin">+</button><button id="zout">−</button></div>
+  <div id="zoom"><button id="homeBtn" title="Back to my real position" style="display:none">📍</button><button id="recenter" title="Recenter">◎</button><button id="zin">+</button><button id="zout">−</button></div>
 </div>
 <div id="duel"></div>
 <div id="screen"></div>
@@ -202,7 +202,7 @@ const S = {
   player: null, mode: 'alert', modeCooldown: 0, vehicle: false, simDriving: false,
   world: null, worldKind: 'demo', landmarks: [], agents: [], enemies: [], raid: null, nextRaidIn: 50,
   cam: {x:0, y:0, zoom:1.8, free:false}, busy:false, t:0, gps:null, heldNotices:[],
-  cooldowns: new Map(), incomeT: 0, aiT: 0, challengeT: 12, tapMove: true,
+  cooldowns: new Map(), incomeT: 0, aiT: 0, challengeT: 12, 
   realm: 'forest', realms: {}, invites: [], portalCD: 0, inviteT: 40
 };
 
@@ -270,15 +270,15 @@ function genDemoWorld(){
   return finishWorld(w);
 }
 
-async function genOsmWorld(lat, lon){
-  const r = 450;
+async function genOsmWorld(lat, lon, lat0 = lat, lon0 = lon){
+  const r = 600;
   const q = `[out:json][timeout:25];(way["highway"](around:${r},${lat},${lon});way["building"](around:${r},${lat},${lon});way["leisure"~"park|garden"](around:${r+150},${lat},${lon});way["landuse"~"grass|forest|recreation_ground|meadow|village_green"](around:${r+150},${lat},${lon});way["natural"~"water|wood"](around:${r+150},${lat},${lon});way["waterway"](around:${r+150},${lat},${lon});node["amenity"="fountain"](around:${r},${lat},${lon});node["tourism"~"artwork|viewpoint|attraction"](around:${r},${lat},${lon});node["historic"](around:${r},${lat},${lon}););out geom;`;
   const res = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}});
   if(!res.ok) throw new Error('map data ' + res.status);
   const js = await res.json();
-  const k = Math.cos(lat*Math.PI/180)*111320;
-  const P = (la, lo) => [(lo-lon)*k, -(la-lat)*110540];
-  const w = {lines:[], areas:[], landmarkSpots:[], spawn:[0,0], named:[]};
+  const k = Math.cos(lat0*Math.PI/180)*111320;
+  const P = (la, lo) => [(lo-lon0)*k, -(la-lat0)*110540];
+  const w = {lines:[], areas:[], landmarkSpots:[], spawn:P(lat, lon), named:[]};
   let buildings = 0;
   for(const e of js.elements){
     const t = e.tags || {};
@@ -430,6 +430,7 @@ function render(){
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   for(const l of S.landmarks) drawLandmark(l);
   for(const e of S.enemies) drawEnemy(e);
+  if(S.worldKind === 'osm') drawReach();
   drawPlayer();
   const h = new Date().getHours();
   if(h >= 19 || h < 6){ ctx.fillStyle = 'rgba(10,20,55,.32)'; ctx.fillRect(0, 0, W, H); }
@@ -471,6 +472,22 @@ function drawEnemy(e){
   for(let i = 0; i < 3; i++) ctx.lineTo(x + s - (i + .5)*s*2/3, y + b + s*(i % 2 ? .4 : 1.1));
   ctx.closePath(); ctx.fill();
   ctx.fillStyle = '#d78bff'; ctx.beginPath(); ctx.arc(x - s*.35, y + b - s*.3, s*.18, 0, 6.283); ctx.arc(x + s*.35, y + b - s*.3, s*.18, 0, 6.283); ctx.fill();
+}
+function drawReach(){
+  const p = S.player, [rx, ry] = toScreen(p.rx, p.ry), r = reachFor(p.rank)*S.cam.zoom;
+  // dim everything outside the reachable area
+  ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.moveTo(rx + r, ry); ctx.arc(rx, ry, r, 0, 6.283, true);
+  ctx.fillStyle = 'rgba(5,10,25,.5)'; ctx.fill('evenodd');
+  ctx.setLineDash([8, 6]); ctx.lineDashOffset = -S.t*6; ctx.strokeStyle = 'rgba(140,200,255,.9)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(rx, ry, r, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
+  label(rx, Math.max(ry - r - 10, 100), `Reach ${reachFor(p.rank)} m · rank ${p.rank}`, '#cfe3ff', 11.5, true);
+  if(p.linked) return;
+  const [vx, vy] = toScreen(p.x, p.y);
+  ctx.strokeStyle = 'rgba(120,190,255,.6)'; ctx.lineWidth = 1.5; ctx.setLineDash([2, 4]);
+  ctx.beginPath(); ctx.moveTo(rx, ry); ctx.lineTo(vx, vy); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(60,140,255,.25)'; ctx.beginPath(); ctx.arc(rx, ry, 14, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#3c8cff'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(rx, ry, 6, 0, 6.283); ctx.fill(); ctx.stroke();
+  label(rx, ry + 18, 'You (real)', '#cfe3ff', 10.5, false);
 }
 function drawPlayer(){
   const p = S.player, [x, y] = toScreen(p.x, p.y), col = FAC(p.fac).color;
@@ -572,7 +589,7 @@ function signupWorld(){
     msg.textContent = 'Asking for your location…';
     navigator.geolocation.getCurrentPosition(async pos => {
       msg.textContent = 'Loading your streets…';
-      try{ const w = await genOsmWorld(pos.coords.latitude, pos.coords.longitude); S.gps = {lat0:pos.coords.latitude, lon0:pos.coords.longitude}; startGame(w, 'osm'); }
+      try{ const w = await genOsmWorld(pos.coords.latitude, pos.coords.longitude); S.gps = {lat0:pos.coords.latitude, lon0:pos.coords.longitude, lat:pos.coords.latitude, lon:pos.coords.longitude, center:[0,0], loading:false}; startGame(w, 'osm'); }
       catch(e){ msg.textContent = 'Could not load map data (' + e.message + '). Starting the demo village…'; setTimeout(() => startGame(genDemoWorld(), 'demo'), 1600); }
     }, () => { msg.textContent = 'Location was blocked. Starting the demo village…'; setTimeout(() => startGame(genDemoWorld(), 'demo'), 1400); }, {enableHighAccuracy:true, timeout:10000});
   };
@@ -582,20 +599,19 @@ function signupWorld(){
 function startGame(world, kind){
   S.world = world; S.worldKind = kind;
   const pd = S.pending;
-  S.player = {name:pd.name, fac:pd.fac, by:pd.by, coins:pd.coins ?? 150, rank:pd.rank ?? 0, x:world.spawn[0], y:world.spawn[1], tx:null, ty:null, dir:0, speedSamples:[]};
+  S.player = {name:pd.name, fac:pd.fac, by:pd.by, coins:pd.coins ?? 150, rank:pd.rank ?? 0, x:world.spawn[0], y:world.spawn[1], rx:world.spawn[0], ry:world.spawn[1], linked:true, tx:null, ty:null, dir:0, speedSamples:[]};
   S.cam.x = S.player.x; S.cam.y = S.player.y;
   S.realm = 'forest';
   S.realms = {forest:{unlocked:true, landmarks:makeLandmarks(world, 'forest')}, cyber:{unlocked:false, landmarks:null}, kingdom:{unlocked:false, landmarks:null}};
   for(const k of pd.realms || []) if(S.realms[k]) S.realms[k].unlocked = true;
   S.landmarks = S.realms.forest.landmarks; S.agents = makeAgents();
   S.enemies = [makeEnemy(), makeEnemy(), makeEnemy()];
-  S.tapMove = kind === 'demo';
   scr.style.display = 'none';
   updateHud();
   if(kind === 'osm') startGpsWatch();
   setTimeout(() => sheet(`<h2>Welcome, ${esc(S.player.name)}</h2>
     <p>You're in the <b>Forest Realm</b>. Roads are forest paths, buildings are woods, parks are glades.</p>
-    <p><b>Your first goal:</b> walk to the glowing <b>Sprout Shrine</b> nearby and claim it. ${kind === 'demo' ? 'Tap the map to walk.' : 'Walk there for real, or turn on tap-to-move in settings.'}</p>
+    <p><b>Your first goal:</b> walk to the glowing <b>Sprout Shrine</b> nearby and claim it. ${kind === 'demo' ? 'Tap the map to walk.' : 'Walk there for real, or tap the map to walk virtually. Your virtual reach starts at 50 m and grows with rank, up to 500 m.'}</p>
     <p>⚡ <b>Alert</b>: rivals nearby can challenge you. 🛡️ <b>Shielded</b>: no player can challenge you, but blight raids still come for your landmarks.</p>
     <div class="row"><button class="primary" id="ok">Let's go</button></div>`).querySelector('#ok').onclick = closeSheet, 300);
 }
@@ -607,7 +623,9 @@ function startGpsWatch(){
     const now = performance.now()/1000;
     if(last){ const sp = dist(x, y, last.x, last.y)/Math.max(.5, now - last.t); S.player.speedSamples.push([now, pos.coords.speed ?? sp]); }
     last = {x, y, t:now};
-    if(!S.tapMove){ S.player.tx = x; S.player.ty = y; }
+    S.gps.lat = pos.coords.latitude; S.gps.lon = pos.coords.longitude;
+    S.player.rx = x; S.player.ry = y;
+    if(S.player.linked){ S.player.tx = x; S.player.ty = y; }
   }, () => {}, {enableHighAccuracy:true});
 }
 
@@ -640,10 +658,34 @@ function handleTap(sx, sy){
   if(!S.player || S.busy) return;
   for(const l of S.landmarks){ const [x, y] = toScreen(l.x, l.y); if(dist(x, y, sx, sy) < 26) return openLandmark(l); }
   for(const e of S.enemies){ const [x, y] = toScreen(e.x, e.y); if(dist(x, y, sx, sy) < 26) return openEnemy(e); }
-  if(S.tapMove){ const [wx, wy] = toWorld(sx, sy); S.player.tx = wx; S.player.ty = wy; S.cam.free = false; $('#recenter').style.display = 'none'; }
-  else toast('Walk in the real world to move, or turn on tap-to-move in ⚙️.');
+  const [wx, wy] = toWorld(sx, sy); walkTo(wx, wy);
 }
 const RANGE = 40;
+const reachFor = rank => clamp(50 + rank, 50, 500);
+function walkTo(x, y){
+  const p = S.player;
+  S.cam.free = false; $('#recenter').style.display = 'none';
+  if(S.worldKind !== 'osm'){ p.tx = x; p.ty = y; return; }
+  if(S.vehicle) return toast('Virtual walking is off while you are in a vehicle.');
+  const reach = reachFor(p.rank), d = dist(x, y, p.rx, p.ry);
+  if(d > reach){ const k = (reach - 1)/d; x = p.rx + (x - p.rx)*k; y = p.ry + (y - p.ry)*k; toast(`Your reach is ${reach} m at rank ${p.rank}. Rank up to reach further (max 500 m).`); }
+  p.linked = false; p.returning = false; p.tx = x; p.ty = y; $('#homeBtn').style.display = 'block';
+}
+$('#homeBtn').onclick = () => { const p = S.player; p.returning = true; p.tx = p.rx; p.ty = p.ry; S.cam.free = false; };
+async function reloadMap(x, y){
+  const g = S.gps; g.loading = true;
+  const k = Math.cos(g.lat0*Math.PI/180)*111320, lat = g.lat0 - y/110540, lon = g.lon0 + x/k;
+  try{
+    const w = await genOsmWorld(lat, lon, g.lat0, g.lon0);
+    w.spawn = S.world.spawn; S.world = w; g.center = [x, y];
+    for(const key of Object.keys(S.realms)){
+      const r = S.realms[key]; if(!r.landmarks) continue;
+      const extra = makeLandmarks(w, key).filter(l => !l.tutorial && !r.landmarks.some(o => dist(o.x, o.y, l.x, l.y) < 70));
+      r.landmarks.push(...extra.slice(0, 12));
+    }
+  }catch(e){ g.retryAt = S.t + 30; }
+  g.loading = false;
+}
 const pdist = o => dist(S.player.x, S.player.y, o.x, o.y);
 
 /* ---------- landmarks ---------- */
@@ -653,7 +695,7 @@ function openLandmark(l){
   const raidHere = S.raid && S.raid.lm === l;
   let owner = l.corrupted ? '<span style="color:#b98bff">Corrupted by blight</span>' : l.owner ? `<span style="color:${fac.color}">${esc(l.owner)}</span> · ${fac.name}` : 'Unclaimed';
   let actions = '';
-  if(!near) actions = `<button class="primary" data-a="walk">${S.tapMove ? 'Walk here' : 'Head there'} (${d} m away)</button><p class="center">You must be within ${RANGE} m to act here.</p>`;
+  if(!near) actions = `<button class="primary" data-a="walk">Walk here (${d} m away)</button><p class="center">You must be within ${RANGE} m to act here.</p>`;
   else if(S.vehicle) actions = `<p>🚗 Vehicle detected. Actions are off until you're on foot.</p>`;
   else if(mine){
     actions = raidHere ? `<button class="primary" data-a="defend">⚔️ Defend against the raid</button>` : '';
@@ -661,7 +703,7 @@ function openLandmark(l){
   }
   else if(l.corrupted) actions = `<button class="primary" data-a="cleanse">🌿 Cleanse and claim</button>`;
   else if(!l.owner) actions = `<button class="primary" data-a="claim">✋ Claim this landmark</button>`;
-  else if(l.fac === S.player.fac) actions = `<button data-a="reinforce">🤝 Reinforce for your faction (+5 ⚔️)</button>`;
+  else if(l.fac === S.player.fac) actions = `<button data-a="reinforce" ${l.ward > 0 ? 'disabled' : ''}>🤝 Reinforce for your faction${l.ward > 0 ? ' · shielded ' + Math.ceil(l.ward) + 's' : ' (+5 ⚔️)'}</button><p class="center">An ally holds this landmark. Reinforcing shields it from rival factions for 3 minutes.</p>`;
   else actions = `<button class="primary" data-a="challenge">⚔️ Challenge for this landmark</button><p class="center">Taking a landmark is a duel against its keeper.</p>`;
   const sh = sheet(`<h2>${esc(l.name)}</h2>
     <div class="kv"><span>Keeper</span><span>${owner}</span></div>
@@ -672,9 +714,9 @@ function openLandmark(l){
   sh.onclick = e => {
     const a = e.target.closest('button')?.dataset.a; if(!a) return;
     if(a === 'close') return closeSheet();
-    if(a === 'walk'){ closeSheet(); if(S.tapMove){ S.player.tx = l.x; S.player.ty = l.y + 12; S.cam.free = false; } else toast('Head toward ' + l.name + ' — it\'s ' + d + ' m away.'); return; }
+    if(a === 'walk'){ closeSheet(); walkTo(l.x, l.y + 12); return; }
     if(a === 'ward'){ if(S.player.coins < 20) return toast('Not enough coins.', 'bad'); S.player.coins -= 20; l.ward = 120; updateHud(); closeSheet(); return notify('🔷 Ward placed on ' + l.name + ' for 2 minutes.', 'good'); }
-    if(a === 'reinforce'){ closeSheet(); S.player.rank += 5; updateHud(); return notify('🤝 You reinforced ' + l.name + ' for ' + FAC(S.player.fac).name + '.', 'good'); }
+    if(a === 'reinforce'){ closeSheet(); if(l.reinforcedAt > S.t - 300) return toast('Already reinforced recently. Try again later.'); l.reinforcedAt = S.t; l.ward = Math.max(l.ward, 180); S.player.rank += 5; updateHud(); return notify('🤝 You reinforced ' + l.name + '. Rival factions can\'t take it for 3 minutes. +5 ⚔️', 'good'); }
     closeSheet();
     if(a === 'claim'){
       startDuel({foe:'Forest guardian', foeFac:null, diff: l.tutorial ? 0 : 1, title:'Claim ' + l.name, stakes:'Win to become keeper of this landmark.',
@@ -767,7 +809,7 @@ function renderRaidbar(){
   b.style.display = 'block';
   const l = S.raid.lm, d = Math.round(pdist(l));
   b.innerHTML = `<div class="card" style="border-color:#ff6b6b"><div class="tx"><b>⚠ Blight raid on ${esc(l.name)}</b><br><span style="color:var(--quiet)">Strikes in ${Math.ceil(S.raid.t)} s · ${l.ward > 0 ? 'ward active 🔷' : d + ' m away'}</span></div><button id="raidGo">Go</button></div>`;
-  $('#raidGo').onclick = () => { if(S.tapMove){ S.player.tx = l.x; S.player.ty = l.y + 12; } S.cam.free = false; openLandmark(l); };
+  $('#raidGo').onclick = () => { walkTo(l.x, l.y + 12); openLandmark(l); };
 }
 function resolveRaid(){
   const l = S.raid.lm; S.raid = null; S.nextRaidIn = 60 + Math.random()*50;
@@ -946,6 +988,7 @@ $('#realmBtn').onclick = () => {
   const sh = sheet(`<h2>${R0.icon} ${R0.name}</h2><p>${S.worldKind === 'osm' ? 'Your real streets' : 'Demo village'} · ${S.landmarks.length} landmarks · ${mine} yours</p>
     ${counts.map(([f, n]) => `<div class="kv"><span><span class="dot" style="display:inline-block;background:${f.color}"></span> ${f.name}</span><span>${n}</span></div>`).join('')}
     <div class="kv"><span>Echoes nearby (other realms)</span><span>2 ◌</span></div>
+    <div class="kv"><span>Your virtual reach</span><span>${reachFor(S.player.rank)} m of 500 m</span></div>
     <h2 style="font-size:17px;margin-top:16px">Realms</h2>
     <p class="note" style="margin-top:0">A realm opens only through an invitation from someone already inside it.</p>
     ${rows}
@@ -978,7 +1021,6 @@ $('#realmBtn').onclick = () => {
 $('#setBtn').onclick = () => {
   const sh = sheet(`<h2>Settings</h2>
     <div class="toggle"><div>Simulate driving<br><small style="color:var(--quiet)">Test the no-play-in-vehicle rule</small></div><button class="sw ${S.simDriving ? 'on' : ''}" data-t="drive"></button></div>
-    <div class="toggle"><div>Tap to move<br><small style="color:var(--quiet)">For testing without walking</small></div><button class="sw ${S.tapMove ? 'on' : ''}" data-t="tap"></button></div>
     <p class="note">Prototype limits: other players are simulated by AI and Bluetooth proximity isn't available in a browser, so nearness is checked by map distance. Timers are shortened so you can try everything in a few minutes.</p>
     <div class="stack"><button class="danger" data-t="reset">Reset and sign out</button><button data-t="close">Close</button></div>`);
   sh.onclick = e => {
@@ -986,7 +1028,6 @@ $('#setBtn').onclick = () => {
     if(t === 'close') return closeSheet();
     if(t === 'reset'){ store.set('player', null); location.reload(); return; }
     if(t === 'drive'){ S.simDriving = !S.simDriving; e.target.classList.toggle('on', S.simDriving); }
-    if(t === 'tap'){ S.tapMove = !S.tapMove; e.target.classList.toggle('on', S.tapMove); }
   };
 };
 
@@ -997,9 +1038,19 @@ function update(dt){
   S.t += dt;
   // movement
   if(p.tx != null){
-    const d = dist(p.x, p.y, p.tx, p.ty), sp = S.worldKind === 'osm' && !S.tapMove ? Math.max(d*2, 2) : 11;
+    const d = dist(p.x, p.y, p.tx, p.ty), sp = S.worldKind === 'osm' && p.linked ? Math.max(d*2, 2) : 11;
     if(d < .8){ p.tx = p.ty = null; }
     else { const k = Math.min(1, sp*dt/d); p.dir = Math.atan2(p.ty - p.y, p.tx - p.x); p.x += (p.tx - p.x)*k; p.y += (p.ty - p.y)*k; }
+  }
+  if(S.worldKind === 'osm'){
+    if(S.vehicle && !p.linked){ p.linked = true; p.returning = false; p.x = p.rx; p.y = p.ry; p.tx = p.ty = null; $('#homeBtn').style.display = 'none'; }
+    if(!p.linked){
+      const reach = reachFor(p.rank), d = dist(p.x, p.y, p.rx, p.ry);
+      if(d > reach){ const k = reach/d; p.x = p.rx + (p.x - p.rx)*k; p.y = p.ry + (p.y - p.ry)*k; }
+      if(p.returning){ p.tx = p.rx; p.ty = p.ry; if(d < 2){ p.linked = true; p.returning = false; p.tx = p.ty = null; $('#homeBtn').style.display = 'none'; } }
+    }
+    const g = S.gps;
+    if(g && !g.loading && !(g.retryAt > S.t) && dist(p.x, p.y, g.center[0], g.center[1]) > 320) reloadMap(p.x, p.y);
   }
   if(!S.cam.free){ S.cam.x += (p.x - S.cam.x)*Math.min(1, dt*5); S.cam.y += (p.y - S.cam.y)*Math.min(1, dt*5); }
   // vehicle detection: simulated toggle, or GPS speed over ~25 km/h
@@ -1017,7 +1068,7 @@ function update(dt){
   if(S.modeCooldown > 0){ S.modeCooldown -= dt; if(S.modeCooldown <= 0){ S.mode = 'alert'; notify('⚡ You are alert. Rivals can challenge you.'); } updateHud(); }
   // agents
   for(const a of S.agents){
-    if(dist(a.x, a.y, a.tx, a.ty) < 2){ [a.tx, a.ty] = Math.random() < .35 ? randomPointNear(p.x, p.y, 120) : randomPointNear(S.world.spawn[0], S.world.spawn[1], 420); if(Math.random() < .2) a.mode = a.mode === 'alert' ? 'shield' : 'alert'; }
+    if(dist(a.x, a.y, a.tx, a.ty) < 2){ [a.tx, a.ty] = Math.random() < .35 ? randomPointNear(p.x, p.y, 120) : randomPointNear(p.rx, p.ry, 420); if(Math.random() < .2) a.mode = a.mode === 'alert' ? 'shield' : 'alert'; }
     const d = dist(a.x, a.y, a.tx, a.ty), k = Math.min(1, a.speed*dt/d); a.x += (a.tx - a.x)*k; a.y += (a.ty - a.y)*k;
   }
   for(const e of S.enemies){
@@ -1031,7 +1082,7 @@ function update(dt){
   if(S.incomeT >= 10){ S.incomeT = 0; const n = S.landmarks.filter(l => l.owner === p.name && !l.corrupted).length; if(n){ p.coins += n; updateHud(); } }
   // AI factions shift the map
   S.aiT += dt;
-  if(S.aiT > 25){ S.aiT = 0; const cand = S.landmarks.filter(l => l.owner !== p.name && !l.tutorial && pdist(l) > 80); if(cand.length){ const l = pick(cand); const f = pick(FACTIONS); if(l.corrupted && Math.random() < .5){ l.corrupted = false; } l.fac = f.id; l.owner = pick(AI_NAMES); } }
+  if(S.aiT > 25){ S.aiT = 0; const cand = S.landmarks.filter(l => l.owner !== p.name && !l.tutorial && !(l.ward > 0) && pdist(l) > 80); if(cand.length){ const l = pick(cand); const f = pick(FACTIONS); if(l.corrupted && Math.random() < .5){ l.corrupted = false; } l.fac = f.id; l.owner = pick(AI_NAMES); } }
   // AI challenges
   if(!S.busy && S.mode === 'alert' && !S.vehicle){
     S.challengeT -= dt;
