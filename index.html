@@ -38,7 +38,7 @@ button:disabled{opacity:.45}
 .rules{margin:10px 0 0;padding:0;list-style:none}
 .rules li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(214,190,128,.12);font-size:14px;line-height:1.4}
 .rules li span:first-child{font-size:20px;flex:none;width:26px;text-align:center}
-#toasts{position:fixed;left:8px;right:64px;bottom:calc(128px + env(safe-area-inset-bottom));z-index:30;display:flex;flex-direction:column;gap:6px;max-width:420px;pointer-events:none}
+#toasts{position:fixed;left:8px;right:64px;bottom:calc(128px + env(safe-area-inset-bottom));z-index:35;display:flex;flex-direction:column;gap:6px;max-width:420px;pointer-events:none}
 .toast{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:8px 11px;font-size:12.5px;line-height:1.35;animation:tin .25s ease}
 .toast.good{border-color:var(--good)}.toast.bad{border-color:var(--bad)}.toast.gold{border-color:var(--gold)}
 @keyframes tin{from{opacity:0;transform:translateY(-6px)}}
@@ -50,7 +50,7 @@ button:disabled{opacity:.45}
 #zoom{display:flex;flex-direction:column;gap:6px}
 #zoom button{width:44px;height:40px;padding:0;font-size:18px}
 #recenter{display:none}
-.overlay{position:fixed;inset:0;z-index:20;background:rgba(5,9,6,.6);display:flex;align-items:flex-end;justify-content:center}
+.overlay{position:fixed;inset:0;z-index:30;background:rgba(5,9,6,.6);display:flex;align-items:flex-end;justify-content:center}
 .sheet{width:min(100%,520px);max-height:88vh;overflow:auto;background:linear-gradient(#18241b,#101812);border:1px solid var(--edge);border-bottom:none;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));animation:sin .25s ease}
 @keyframes sin{from{transform:translateY(30px);opacity:.4}}
 .sheet h2{margin:0 0 4px;font-family:Cinzel,serif;font-size:21px;color:var(--gold)}
@@ -75,6 +75,18 @@ label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
 .fcard b{display:block;margin:6px 0 2px}
 .fcard small{color:var(--quiet);font-size:12px}
 .note{font-size:12px;color:var(--quiet);margin-top:10px;line-height:1.4}
+#studio{position:fixed;inset:0;z-index:26;background:#0d1510;display:none;flex-direction:column}
+#studio canvas{flex:1;width:100%;min-height:0;touch-action:none;display:block}
+.stbar{display:flex;align-items:center;gap:8px;padding:10px 10px;padding-top:calc(10px + env(safe-area-inset-top));background:var(--panel);border-bottom:1px solid var(--edge)}
+.stbar .grow{flex:1;min-width:0}
+.stbot{background:var(--panel);border-top:1px solid var(--edge);padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+.pal{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 8px}
+.sw2{flex:none;width:58px;border-radius:12px;border:2px solid transparent;background:rgba(0,0,0,.35);padding:6px 4px;text-align:center;font-size:11px;color:var(--quiet);cursor:pointer}
+.sw2.sel{border-color:var(--gold);color:var(--ink)}
+.sw2 i{display:block;width:30px;height:30px;margin:0 auto 4px;border-radius:6px;box-shadow:inset 0 -6px 0 rgba(0,0,0,.25)}
+.tools{display:flex;gap:6px}
+.tools button{flex:1;padding:9px 6px;font-size:13px}
+.tools button.on{background:linear-gradient(#e8c66a,#c9a24a);color:#1b1408;border:none;font-weight:700}
 #duel{position:fixed;inset:0;z-index:25;background:radial-gradient(ellipse at 50% 30%,#1f3524,#070b08 75%);display:none;flex-direction:column;padding:16px;padding-top:calc(16px + env(safe-area-inset-top))}
 .dhead{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--quiet)}
 .vs{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0}
@@ -128,6 +140,7 @@ label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
   <div id="zoom"><button id="viewBtn" title="Switch 2D / 3D" style="font-size:14px;font-weight:700">3D</button><button id="homeBtn" title="Back to my real position" style="display:none">📍</button><button id="recenter" title="Recenter">◎</button><button id="zin">+</button><button id="zout">−</button></div>
 </div>
 <div id="duel"></div>
+<div id="studio"></div>
 <div id="screen"></div>
 
 <script>
@@ -216,6 +229,20 @@ const STRUCTS = {
   barracks:  {name:'Barracks',   icon:'🏕️', cost:300, desc:'2 garrison fighters join you in battles defending this land.'},
   wardstone: {name:'Ward Stone', icon:'💎', cost:350, desc:'Automatically blocks one raid on this land every 10 minutes.'}
 };
+const MATS = {
+  wood:    {name:'Wood',    color:'#a0703c', price:1},
+  stone:   {name:'Stone',   color:'#8a8f96', price:2},
+  moss:    {name:'Moss',    color:'#4f8a3a', price:1},
+  brick:   {name:'Brick',   color:'#b5523b', price:3},
+  marble:  {name:'Marble',  color:'#e9e4da', price:4},
+  glass:   {name:'Glass',   color:'#9fd8f0', price:4, glass:true},
+  lantern: {name:'Lantern', color:'#ffd27a', price:8, glow:true},
+  gold:    {name:'Gold',    color:'#e8c14a', price:12},
+  crystal: {name:'Crystal', color:'#a66bff', price:15, glow:true}
+};
+const PLOT = 16, PLOT_H = 12;
+const prestigeOf = l => l.creation ? Object.values(l.creation.blocks).reduce((t, m) => t + MATS[m].price, 0) : 0;
+const prestigeBonus = l => Math.min(5, Math.floor(prestigeOf(l)/100));
 const has = (l, k) => !!(l.builds && l.builds.includes(k));
 const slotsOf = l => l.fortress ? 5 : 3;
 const BOSSES = {forest:'Blight Colossus', cyber:'The Overmind', kingdom:'Ancient Dragon'};
@@ -477,6 +504,7 @@ function drawLandmark(l){
   const g = ctx.createRadialGradient(x, y, 2, x, y, rad);
   g.addColorStop(0, hexA(col, .55)); g.addColorStop(1, hexA(col, 0));
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rad, 0, 6.283); ctx.fill();
+  if(l.creation && l.creation.thumb){ const sz = PLOT*z; ctx.imageSmoothingEnabled = false; ctx.globalAlpha = .95; ctx.drawImage(l.creation.thumb, x - sz/2, y - sz/2, sz, sz); ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = true; }
   const s = clamp(z*5, 7, 13);
   ctx.fillStyle = '#6d6a60'; ctx.beginPath(); ctx.ellipse(x, y + s*.9, s*1.2, s*.45, 0, 0, 6.283); ctx.fill();
   ctx.fillStyle = l.corrupted ? '#2a1640' : '#cfc8b0'; ctx.fillRect(x - s*.45, y - s*1.2, s*.9, s*2.1);
@@ -559,7 +587,7 @@ function updateHud(){
   else if(S.modeCooldown > 0){ mb.className = 'shield'; mb.textContent = '⏳ ' + Math.ceil(S.modeCooldown) + 's'; }
   else if(S.mode === 'alert'){ mb.className = 'alert'; mb.textContent = '⚡ Alert'; }
   else { mb.className = 'shield'; mb.textContent = '🛡️ Shielded'; }
-  store.set('player', {name:p.name, fac:p.fac, coins:p.coins, rank:p.rank, by:p.by, weapons:p.weapons, weapon:p.weapon, realms:Object.keys(S.realms).filter(k => S.realms[k].unlocked)});
+  store.set('player', {name:p.name, fac:p.fac, coins:p.coins, rank:p.rank, by:p.by, weapons:p.weapons, weapon:p.weapon, mats:p.mats, realms:Object.keys(S.realms).filter(k => S.realms[k].unlocked)});
   $('#realmBtn').textContent = REALMS[S.realm].icon + ' Realm';
 }
 
@@ -634,7 +662,7 @@ function signupWorld(){
 function startGame(world, kind){
   S.world = world; S.worldKind = kind;
   const pd = S.pending;
-  S.player = {name:pd.name, fac:pd.fac, by:pd.by, coins:pd.coins ?? 150, rank:pd.rank ?? 0, weapons:pd.weapons || ['bow'], weapon:pd.weapon || 'bow', x:world.spawn[0], y:world.spawn[1], rx:world.spawn[0], ry:world.spawn[1], linked:true, tx:null, ty:null, dir:0, speedSamples:[]};
+  S.player = {name:pd.name, fac:pd.fac, by:pd.by, coins:pd.coins ?? 150, rank:pd.rank ?? 0, weapons:pd.weapons || ['bow'], mats:pd.mats || null, weapon:pd.weapon || 'bow', x:world.spawn[0], y:world.spawn[1], rx:world.spawn[0], ry:world.spawn[1], linked:true, tx:null, ty:null, dir:0, speedSamples:[]};
   S.cam.x = S.player.x; S.cam.y = S.player.y;
   S.realm = 'forest';
   S.realms = {forest:{unlocked:true, landmarks:makeLandmarks(world, 'forest')}, cyber:{unlocked:false, landmarks:null}, kingdom:{unlocked:false, landmarks:null}};
@@ -678,6 +706,7 @@ function showRules(){
     <li><span>🏰</span><div><b>Land.</b> Claim free landmarks, take rivals' landmarks, or win them as a team. Owned land pays coins. Team land is split into shares you can sell or duel for.</div></li>
     <li><span>⚠️</span><div><b>Raids.</b> Your land gets raided, always with a countdown. Place a ward or defend it in person, or it becomes corrupted and unowned. Raids happen even in Shielded mode.</div></li>
     <li><span>🔨</span><div><b>Build.</b> On land you own, build up to 3 structures (5 on a fortress): Watchtower, Mint, Wall, Barracks, Ward Stone. They stay with the land: a rival who takes it gets them, a raid that corrupts it destroys them.</div></li>
+    <li><span>🎨</span><div><b>Studio.</b> On land you own, buy materials with coins and build anything, block by block. Creations add <b>prestige</b> (+coins) and stay with the land; a raid that corrupts the land crumbles about a third.</div></li>
     <li><span>🤝</span><div><b>Allies.</b> Team up for a bonus, reinforce allied land (blocks rival factions for 3 minutes), and call allies into battles. ☠ Fortresses can only be taken by a team.</div></li>
     <li><span>📈</span><div><b>Rank (⚔️).</b> Wins add rank. Losing to a player or keeper costs 5; declining a challenge costs 3. Ties go to the defender. Rank unlocks weapons, extends reach and adds force.</div></li>
     <li><span>🪙</span><div><b>Coins.</b> Earned by playing; spent on wards, re-rolls, summons and weapons you've unlocked. Money never buys rank.</div></li>
@@ -813,7 +842,8 @@ function openLandmark(l){
   else if(S.vehicle) actions = `<p>🚗 Vehicle detected. Actions are off until you're on foot.</p>`;
   else if(mine){
     actions = raidHere ? `<button class="primary" data-a="defend">🏹 Defend against the raid</button>` : '';
-    actions += `<button data-a="build">🔨 Build (${(l.builds || []).length}/${slotsOf(l)} slots used)</button>`;
+    actions += `<button class="primary" data-a="studio">🎨 Studio${l.creation ? ` · prestige ${prestigeOf(l)}` : ''}</button>`;
+    actions += `<button data-a="build">🔨 Structures (${(l.builds || []).length}/${slotsOf(l)} slots used)</button>`;
     actions += `<button data-a="ward" ${l.ward > 0 ? 'disabled' : ''}>🔷 Place a ward (20 🪙)${l.ward > 0 ? ' · active ' + Math.ceil(l.ward) + 's' : ''}</button>`;
     if(l.team && l.team.length > 1){
       actions += `<button data-a="sell">💰 Sell my ${pct(myShare(l))} share to the team (${shareValue(l, myShare(l))} 🪙)</button>`;
@@ -827,9 +857,10 @@ function openLandmark(l){
   else actions = `<button class="primary" data-a="battle">🏹 Battle the keeper (needs ~${keeperArmor(l)} force)</button><button data-a="challenge">🎲 Duel the keeper (mini-game)</button>`;
   const sh = sheet(`<h2>${esc(l.name)}</h2>
     <div class="kv"><span>Keeper</span><span>${owner}</span></div>${extra}
+    ${l.creation && Object.keys(l.creation.blocks).length ? `<div class="kv"><span>Creation</span><span>${Object.keys(l.creation.blocks).length} blocks · prestige ${prestigeOf(l)}</span></div>` : ''}
     ${l.builds && l.builds.length ? `<div class="kv"><span>Built</span><span>${l.builds.map(k => STRUCTS[k].icon + ' ' + STRUCTS[k].name).join(', ')}</span></div>` : ''}
     <div class="kv"><span>Distance</span><span>${d} m</span></div>
-    ${mine ? `<div class="kv"><span>Your income</span><span>+${(myShare(l)*((l.fortress ? 3 : 1) + (has(l, 'mint') ? 1 : 0))).toFixed(1)} 🪙 / 10 s</span></div>` : ''}
+    ${mine ? `<div class="kv"><span>Your income</span><span>+${(myShare(l)*((l.fortress ? 3 : 1) + (has(l, 'mint') ? 1 : 0) + prestigeBonus(l))).toFixed(1)} 🪙 / 10 s</span></div>` : ''}
     ${raidHere ? `<p style="color:#ff8a8a">⚠ Raiders strike in ${Math.ceil(S.raid.t)} s. Ward it or defend it in person.</p>` : ''}
     <div class="stack">${actions}<button data-a="close">Close</button></div>`);
   sh.onclick = e => {
@@ -840,6 +871,7 @@ function openLandmark(l){
     if(a === 'reinforce'){ closeSheet(); if(l.reinforcedAt > S.t - 300) return toast('Already reinforced recently. Try again later.'); l.reinforcedAt = S.t; l.ward = Math.max(l.ward, 180); S.player.rank += 5; updateHud(); return notify('🤝 You reinforced ' + l.name + '. Rival factions can\'t take it for 3 minutes. +5 ⚔️', 'good'); }
     if(a === 'sell') return sellShare(l);
     if(a === 'build') return openBuild(l);
+    if(a === 'studio'){ closeSheet(); return openStudio(l); }
     closeSheet();
     if(a === 'fightmate') return fightTeammate(l, btn.dataset.n, false);
     if(a === 'claim'){
@@ -1115,7 +1147,7 @@ function resolveRaid(){
   const l = S.raid.lm; S.raid = null; S.nextRaidIn = 60 + Math.random()*50;
   if(l.ward > 0){ S.player.coins += 10; notify(`🔷 Your ward held! ${l.name} is safe. +10 🪙`, 'good'); }
   else if(has(l, 'wardstone') && !(l.wsAt > S.t)){ l.wsAt = S.t + 600; notify(`💎 Your Ward Stone blocked the raid on ${l.name}. It recharges in 10 minutes.`, 'good'); }
-  else if(isMine(l)){ const lost = (l.builds || []).length; l.builds = []; if(G3) G3.lmDirty = true; if(lost) setTimeout(() => notify(`🔥 ${lost} structure${lost > 1 ? 's were' : ' was'} destroyed in the raid.`, 'bad'), 1500); l.corrupted = true; l.owner = null; l.fac = null; l.team = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} was overrun and is now corrupted. Cleanse it to win it back. −5 ⚔️`, 'bad'); }
+  else if(isMine(l)){ if(l.creation){ const keys = Object.keys(l.creation.blocks).filter(() => Math.random() < 1/3); keys.forEach(k => delete l.creation.blocks[k]); creationChanged(l); if(keys.length) setTimeout(() => notify(`🧱 ${keys.length} blocks of your creation crumbled in the raid.`, 'bad'), 2600); } const lost = (l.builds || []).length; l.builds = []; if(G3) G3.lmDirty = true; if(lost) setTimeout(() => notify(`🔥 ${lost} structure${lost > 1 ? 's were' : ' was'} destroyed in the raid.`, 'bad'), 1500); l.corrupted = true; l.owner = null; l.fac = null; l.team = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} was overrun and is now corrupted. Cleanse it to win it back. −5 ⚔️`, 'bad'); }
   updateHud(); renderRaidbar();
 }
 
@@ -1370,7 +1402,7 @@ function init3D(){
     geo:{base:new THREE.CylinderGeometry(3, 3.8, 1.2, 10), pillar:new THREE.BoxGeometry(1.8, 7, 1.8), orb:new THREE.SphereGeometry(1.5, 14, 10), ring:new THREE.TorusGeometry(6, .35, 6, 32), ward:new THREE.TorusGeometry(8.5, .25, 6, 40), en:new THREE.SphereGeometry(2.6, 12, 10), eye:new THREE.SphereGeometry(.45, 8, 6)}};
   addEventListener('resize', () => { renderer.setSize(W, H, false); camera.aspect = W/H; camera.updateProjectionMatrix(); });
 }
-function disposeGroup(g){ g.traverse(o => { if(o.geometry && !Object.values(G3.geo).includes(o.geometry)) o.geometry.dispose(); if(o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); }); g.clear(); }
+function disposeGroup(g){ const shared = G3 ? Object.values(G3.geo) : []; g.traverse(o => { if(o.geometry && !shared.includes(o.geometry)) o.geometry.dispose(); if(o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); }); g.clear(); }
 const openPts = pts => (pts.length > 2 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) ? pts.slice(0, -1) : pts;
 function ribbonGeo(lines, y, widthScale = 1){
   const THREE = T3, pos = [], idx = [];
@@ -1468,7 +1500,7 @@ function buildMeshes(l, r){
   if(r.bg){ r.gr.remove(r.bg); disposeGroup(r.bg); }
   const bg = new THREE.Group(); r.bg = bg; r.bkey = (l.builds || []).join();
   (l.builds || []).forEach((k, i) => {
-    const a = -2.2 + i*1.25, x = Math.cos(a)*7.5, z = Math.sin(a)*7.5, g = new THREE.Group(); g.position.set(x, 0, z);
+    const a = -2.2 + i*1.25, x = Math.cos(a)*8.6, z = Math.sin(a)*8.6, g = new THREE.Group(); g.position.set(x, 0, z);
     const lam = c => new THREE.MeshLambertMaterial({color:c});
     if(k === 'tower'){ const t = new THREE.Mesh(new THREE.BoxGeometry(1.4, 7, 1.4), lam('#9a8f7a')); t.position.y = 3.5; const roof = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2, 4), lam('#7a3b2a')); roof.position.y = 8; g.add(t, roof); }
     if(k === 'mint'){ const m = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 2, 12), lam('#e8c66a')); m.position.y = 1; g.add(m); }
@@ -1529,10 +1561,11 @@ function render3D(){
     r.own.visible = isMine(l); r.own.material.color.set(l.team ? '#7be08a' : '#e8c66a');
     r.ward.visible = l.ward > 0; r.ward.rotation.z = S.t;
     if(r.bkey !== (l.builds || []).join()) buildMeshes(l, r);
+    if((l.creation ? l.creation.ver : 0) !== (r.cver || 0)) creationMesh(l, r);
     if(r.bg) r.bg.traverse(o => { if(o.userData.spin){ o.rotation.y = S.t*2; o.position.y = 3 + Math.sin(S.t*2)*.4; } });
     r.glow.scale.setScalar(2.4 + Math.sin(S.t*3)*.3 + (S.raid && S.raid.lm === l ? 1.5 + Math.sin(S.t*10) : 0));
   }
-  for(const [l, r] of G3.lm) if(!S.landmarks.includes(l)){ G3.dyn.remove(r.gr); G3.lm.delete(l); }
+  for(const [l, r] of G3.lm) if(!S.landmarks.includes(l)){ G3.dyn.remove(r.gr); if(r.cg) G3.dyn.remove(r.cg); G3.lm.delete(l); }
   // enemies
   for(const e of S.enemies){ const r = G3.en.get(e) || enMesh(e); r.gr.position.set(e.x, 3.5 + Math.sin(S.t*3 + e.phase)*.8, e.y); r.gr.rotation.y = Math.atan2(p.x - e.x, p.y - e.y); }
   for(const [e, r] of G3.en) if(!S.enemies.includes(e)){ G3.dyn.remove(r.gr); G3.en.delete(e); }
@@ -1548,6 +1581,130 @@ function render3D(){
   }
   if(osm && !p.linked){ const [x, y] = project3(p.rx, p.ry, 3); label(x, y + 14, 'You (real)', '#cfe3ff', 10.5, false); }
   if(osm){ const [x, y] = project3(p.rx, p.ry - reachFor(p.rank), 1); label(x, y - 8, `Reach ${reachFor(p.rank)} m · rank ${p.rank}`, '#cfe3ff', 11, true); }
+}
+
+
+/* ---------- building studio (voxel creations on owned land) ---------- */
+async function ensureThree(){ if(T3) return true; toast('Loading the 3D engine…'); try{ T3 = await import(THREE_URL); return true; }catch(e){ toast('3D could not load here.', 'bad'); return false; } }
+function creationChanged(l){
+  const c = l.creation; c.ver = (c.ver || 0) + 1;
+  const cv2 = document.createElement('canvas'); cv2.width = cv2.height = PLOT; const g = cv2.getContext('2d'), top = {};
+  for(const [k, m] of Object.entries(c.blocks)){ const [x, y, z] = k.split(',').map(Number), kk = x + ',' + z; if(!top[kk] || top[kk].y < y) top[kk] = {y, m}; }
+  for(const [kk, v] of Object.entries(top)){ const [x, z] = kk.split(',').map(Number); g.fillStyle = MATS[v.m].color; g.fillRect(x, z, 1, 1); g.fillStyle = `rgba(255,255,255,${Math.min(.35, v.y*.03)})`; g.fillRect(x, z, 1, 1); }
+  c.thumb = Object.keys(c.blocks).length ? cv2 : null;
+}
+function voxelMeshes(blocks, group){
+  const THREE = T3, by = {};
+  for(const [k, m] of Object.entries(blocks)) (by[m] = by[m] || []).push(k.split(',').map(Number));
+  const box = new THREE.BoxGeometry(1, 1, 1), M = new THREE.Matrix4(), out = {};
+  for(const [m, list] of Object.entries(by)){
+    const d = MATS[m], mat = new THREE.MeshLambertMaterial({color:d.color, transparent:!!d.glass, opacity:d.glass ? .55 : 1, emissive:d.glow ? d.color : '#000000', emissiveIntensity:d.glow ? .7 : 0});
+    const im = new THREE.InstancedMesh(box, mat, list.length);
+    list.forEach((p, i) => { M.makeTranslation(p[0] - PLOT/2 + .5, p[1] + .5, p[2] - PLOT/2 + .5); im.setMatrixAt(i, M); });
+    im.userData.list = list; im.userData.mat = m; group.add(im); out[m] = im;
+  }
+  return out;
+}
+function creationMesh(l, r){
+  if(r.cg){ G3.dyn.remove(r.cg); disposeGroup(r.cg); r.cg = null; }
+  r.cver = l.creation ? l.creation.ver : 0;
+  const blocks = l.creation ? l.creation.blocks : {}, keys = Object.keys(blocks);
+  r.gr.children[0].visible = r.gr.children[1].visible = !keys.length;
+  let top = 0; keys.forEach(k => { top = Math.max(top, +k.split(',')[1] + 1); });
+  r.orb.position.y = keys.length ? (top + 4)/1.8 : 9.3; r.glow.position.y = r.orb.position.y;
+  if(!keys.length) return;
+  const cg = new T3.Group(); voxelMeshes(blocks, cg); cg.position.set(l.x, 0, l.y); G3.dyn.add(cg); r.cg = cg;
+}
+let ST = null;
+async function openStudio(l){
+  if(!(await ensureThree())) return;
+  const THREE = T3, p = S.player;
+  if(!p.mats){ p.mats = {wood:40, stone:40, moss:20}; setTimeout(() => toast('🎁 Starter materials: 40 wood, 40 stone, 20 moss.', 'gold'), 600); }
+  l.creation = l.creation || {blocks:{}, ver:0};
+  const el = $('#studio'); el.style.display = 'flex'; S.busy = true;
+  el.innerHTML = `<div class="stbar"><div class="grow"><b style="font-family:Cinzel,serif;color:var(--gold)">🎨 ${esc(l.name)}</b><br><small style="color:var(--quiet)" id="stInfo"></small></div><button id="stHelp">?</button><button class="primary" id="stDone">Done</button></div>
+    <canvas id="stc"></canvas>
+    <div class="stbot"><div class="pal" id="stPal"></div>
+      <div class="tools"><button id="tPlace" class="on">➕ Place</button><button id="tErase">⛏ Remove</button><button id="tUndo">↶ Undo</button><button id="tBuy">🛒 Buy</button></div></div>`;
+  const c = $('#stc'), box = c.getBoundingClientRect(), BW = box.width, BH = box.height;
+  const renderer = new THREE.WebGLRenderer({canvas:c, antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); renderer.setSize(BW, BH, false);
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(THEMES[S.realm].bg); scene.fog = new THREE.Fog(THEMES[S.realm].bg, 60, 140);
+  const camera = new THREE.PerspectiveCamera(45, BW/BH, .5, 400);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x445544, 1.1)); const sun = new THREE.DirectionalLight(0xffffff, 1.3); sun.position.set(-20, 40, 15); scene.add(sun);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(PLOT, PLOT), new THREE.MeshLambertMaterial({color:THEMES[S.realm].park})); ground.rotation.x = -Math.PI/2; scene.add(ground);
+  const grid = new THREE.GridHelper(PLOT, PLOT, 0xffffff, 0xffffff); grid.material.transparent = true; grid.material.opacity = .18; grid.position.y = .01; scene.add(grid);
+  const around = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshLambertMaterial({color:THEMES[S.realm].bg})); around.rotation.x = -Math.PI/2; around.position.y = -.02; scene.add(around);
+  const pillar = new THREE.Mesh(new THREE.CylinderGeometry(.6, .6, 1, 12), new THREE.MeshBasicMaterial({color:l.fac ? FAC(l.fac).color : '#e8c66a'})); pillar.position.set(0, .5, 0); scene.add(pillar);
+  const vg = new THREE.Group(); scene.add(vg);
+  ST = {l, renderer, scene, camera, vg, ground, yaw:.7, pitch:.75, dist:34, mode:'place', mat:Object.keys(p.mats).find(k => p.mats[k] > 0) || 'wood', undo:[], meshes:{}, alive:true};
+  const rebuild = () => { disposeGroup(vg); ST.meshes = voxelMeshes(l.creation.blocks, vg); creationChanged(l); info(); };
+  const info = () => { const n = Object.keys(l.creation.blocks).length; $('#stInfo').textContent = `${n} blocks · prestige ${prestigeOf(l)} (+${prestigeBonus(l)} 🪙/10 s) · 🪙 ${p.coins}`; };
+  const pal = () => { $('#stPal').innerHTML = Object.entries(MATS).map(([k, m]) => `<div class="sw2 ${k === ST.mat ? 'sel' : ''}" data-m="${k}"><i style="background:${m.color}${m.glass ? ';opacity:.6' : ''}"></i>${m.name}<br><b style="color:var(--ink)">${p.mats[k] || 0}</b></div>`).join(''); };
+  $('#stPal').onclick = e => { const d = e.target.closest('[data-m]'); if(!d) return; ST.mat = d.dataset.m; ST.mode = 'place'; setTool(); pal(); };
+  const setTool = () => { $('#tPlace').classList.toggle('on', ST.mode === 'place'); $('#tErase').classList.toggle('on', ST.mode === 'erase'); };
+  $('#tPlace').onclick = () => { ST.mode = 'place'; setTool(); };
+  $('#tErase').onclick = () => { ST.mode = 'erase'; setTool(); };
+  $('#tUndo').onclick = () => { const u = ST.undo.pop(); if(!u) return toast('Nothing to undo.'); if(u.op === 'add'){ delete l.creation.blocks[u.k]; p.mats[u.m] = (p.mats[u.m] || 0) + 1; } else { l.creation.blocks[u.k] = u.m; p.mats[u.m]--; } rebuild(); pal(); };
+  $('#tBuy').onclick = () => buyMats(() => { pal(); info(); updateHud(); });
+  $('#stHelp').onclick = () => sheet(`<h2>Studio</h2><ul class="rules">
+      <li><span>👆</span><div><b>Place:</b> pick a material, then tap the ground or the side of a block to add a block there.</div></li>
+      <li><span>⛏</span><div><b>Remove:</b> tap a block to take it back into your materials.</div></li>
+      <li><span>🔄</span><div><b>Look around:</b> drag to rotate, pinch to zoom.</div></li>
+      <li><span>🛒</span><div><b>Buy:</b> materials cost coins. Rarer materials add more <b>prestige</b>.</div></li>
+      <li><span>🏆</span><div><b>Prestige</b> = total material value. Every 100 prestige adds +1 🪙 every 10 s from this land (max +5).</div></li>
+      <li><span>⚠️</span><div>Your creation stays with the land. A rival who takes it gets it; a raid that corrupts the land crumbles about a third of it.</div></li>
+    </ul><div class="row"><button class="primary" data-x="1">Got it</button></div>`).onclick = e => { if(e.target.closest('button')) closeSheet(); };
+  $('#stDone').onclick = () => {
+    ST.alive = false; renderer.dispose(); disposeGroup(scene); el.style.display = 'none'; el.innerHTML = ''; S.busy = !!overlay; updateHud();
+    const n = Object.keys(l.creation.blocks).length; if(n) toast(`🏛️ ${l.name}: ${n} blocks, prestige ${prestigeOf(l)}.`, 'gold');
+    S.stats.studio = true;
+  };
+  // input: drag rotates, pinch zooms, tap edits
+  const pts = new Map(); let gst = null;
+  c.addEventListener('pointerdown', e => { c.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY}); if(pts.size === 2){ const [a, b] = [...pts.values()]; gst = {pinch:true, d:dist(a.x, a.y, b.x, b.y), z:ST.dist}; } else gst = {moved:false}; });
+  c.addEventListener('pointermove', e => { const q = pts.get(e.pointerId); if(!q || !gst) return; const dx = e.clientX - q.x, dy = e.clientY - q.y; q.x = e.clientX; q.y = e.clientY;
+    if(gst.pinch && pts.size === 2){ const [a, b] = [...pts.values()]; ST.dist = clamp(gst.z*gst.d/dist(a.x, a.y, b.x, b.y), 10, 80); return; }
+    if(!gst.moved && dist(e.clientX, e.clientY, q.sx, q.sy) > 8) gst.moved = true;
+    if(gst.moved){ ST.yaw -= dx*.008; ST.pitch = clamp(ST.pitch + dy*.006, .15, 1.45); } });
+  const end = e => { const q = pts.get(e.pointerId); pts.delete(e.pointerId); if(gst && !gst.pinch && !gst.moved && q && e.type === 'pointerup') edit(e.clientX, e.clientY); if(!pts.size) gst = null; };
+  c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+  c.addEventListener('wheel', e => { ST.dist = clamp(ST.dist*(e.deltaY < 0 ? .9 : 1.1), 10, 80); e.preventDefault(); }, {passive:false});
+  const ray = new THREE.Raycaster();
+  function edit(sx, sy){
+    const r = c.getBoundingClientRect(); ray.setFromCamera({x:(sx - r.left)/r.width*2 - 1, y:-((sy - r.top)/r.height*2 - 1)}, camera);
+    const hit = ray.intersectObjects([...Object.values(ST.meshes), ground], false)[0]; if(!hit) return;
+    let cell = null, target = null;
+    if(hit.object !== ground){ const b = hit.object.userData.list[hit.instanceId]; target = b.join(','); const n = hit.face.normal; cell = [b[0] + Math.round(n.x), b[1] + Math.round(n.y), b[2] + Math.round(n.z)]; }
+    else { cell = [Math.floor(hit.point.x + PLOT/2), 0, Math.floor(hit.point.z + PLOT/2)]; }
+    if(ST.mode === 'erase'){
+      if(!target) return; const m = l.creation.blocks[target]; delete l.creation.blocks[target]; p.mats[m] = (p.mats[m] || 0) + 1; ST.undo.push({op:'del', k:target, m}); rebuild(); pal(); return;
+    }
+    const [x, y, z] = cell;
+    if(x < 0 || z < 0 || x >= PLOT || z >= PLOT || y < 0 || y >= PLOT_H) return toast(`The plot is ${PLOT}×${PLOT} blocks and ${PLOT_H} high.`);
+    if(Math.abs(x - PLOT/2 + .5) < 1 && Math.abs(z - PLOT/2 + .5) < 1 && y < 1) return toast('Keep the center free for the landmark stone.');
+    const k = x + ',' + y + ',' + z; if(l.creation.blocks[k]) return;
+    if(!(p.mats[ST.mat] > 0)) return toast(`No ${MATS[ST.mat].name.toLowerCase()} left. Tap 🛒 Buy.`, 'bad');
+    p.mats[ST.mat]--; l.creation.blocks[k] = ST.mat; ST.undo.push({op:'add', k, m:ST.mat}); rebuild(); pal();
+  }
+  rebuild(); pal(); setTool();
+  const frame = () => {
+    if(!ST || !ST.alive) return;
+    camera.position.set(Math.sin(ST.yaw)*Math.cos(ST.pitch)*ST.dist, Math.sin(ST.pitch)*ST.dist + 2, Math.cos(ST.yaw)*Math.cos(ST.pitch)*ST.dist);
+    camera.lookAt(0, 3, 0); renderer.render(scene, camera); requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+  if(!store.get('studioSeen')){ store.set('studioSeen', true); $('#stHelp').click(); }
+}
+function buyMats(after){
+  const p = S.player;
+  const sh = sheet(`<h2>Buy materials</h2><p>You have 🪙 ${p.coins}. Removing a block always returns it to you.</p><div class="stack">${Object.entries(MATS).map(([k, m]) => `<div class="pack"><div><b><span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:${m.color};vertical-align:-2px"></span> ${m.name}</b><br><small>${m.price} 🪙 per block · you have ${p.mats[k] || 0}</small></div><div style="display:flex;gap:6px"><button data-k="${k}" data-n="10" ${p.coins < m.price*10 ? 'disabled' : ''}>10 · ${m.price*10}</button><button data-k="${k}" data-n="50" ${p.coins < m.price*45 ? 'disabled' : ''}>50 · ${m.price*45}</button></div></div>`).join('')}</div>
+    <p class="note">50-block packs are 10% off.</p><div class="row"><button data-x="1">Done</button></div>`);
+  sh.onclick = e => {
+    const b = e.target.closest('button'); if(!b) return; if(b.dataset.x){ closeSheet(); return after && after(); }
+    const k = b.dataset.k, n = +b.dataset.n, cost = MATS[k].price*(n === 50 ? 45 : 10);
+    if(p.coins < cost) return toast('Not enough coins.', 'bad');
+    p.coins -= cost; p.mats[k] = (p.mats[k] || 0) + n; updateHud(); toast(`+${n} ${MATS[k].name.toLowerCase()}`, 'good'); closeSheet(); buyMats(after);
+  };
 }
 
 /* ---------- main loop ---------- */
@@ -1598,7 +1755,7 @@ function update(dt){
   for(const l of S.landmarks) if(l.ward > 0) l.ward = Math.max(0, l.ward - dt);
   // income
   S.incomeT += dt;
-  if(S.incomeT >= 10){ S.incomeT = 0; const n = S.landmarks.reduce((t, l) => t + myShare(l)*((l.fortress ? 3 : 1) + (has(l, 'mint') ? 1 : 0)), 0); p.carry = (p.carry || 0) + n; if(p.carry >= 1){ p.coins += Math.floor(p.carry); p.carry -= Math.floor(p.carry); updateHud(); } }
+  if(S.incomeT >= 10){ S.incomeT = 0; const n = S.landmarks.reduce((t, l) => t + myShare(l)*((l.fortress ? 3 : 1) + (has(l, 'mint') ? 1 : 0) + prestigeBonus(l)), 0); p.carry = (p.carry || 0) + n; if(p.carry >= 1){ p.coins += Math.floor(p.carry); p.carry -= Math.floor(p.carry); updateHud(); } }
   // AI factions shift the map
   S.aiT += dt;
   if(S.aiT > 25){ S.aiT = 0; const cand = S.landmarks.filter(l => !isMine(l) && !l.tutorial && !l.boss && !(l.ward > 0) && pdist(l) > 80); if(cand.length){ const l = pick(cand); const f = pick(FACTIONS); if(l.corrupted && Math.random() < .5){ l.corrupted = false; } l.fac = f.id; l.owner = pick(AI_NAMES); } }
