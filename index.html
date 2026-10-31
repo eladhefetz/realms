@@ -110,7 +110,7 @@ label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
 <div id="raidbar"></div>
 <div id="toasts"></div>
 <div id="bottom">
-  <button id="storeBtn">🪙 Store</button>
+  <button id="storeBtn">🏹 Store</button>
   <button id="realmBtn">🌲 Realm</button>
   <button id="setBtn">⚙️</button>
   <div class="grow"></div>
@@ -191,6 +191,14 @@ const REALMS = {
   cyber:   {name:'Cyber Realm',   icon:'💠', featured:'runes',  lmA:['Neon','Ghost','Quantum','Static','Chrome','Signal','Null','Hex'], lmB:['Node','Relay','Core','Terminal','Spire','Hub','Gateway','Array'], enemies:['Rogue AI','Virus swarm'], blurb:'Neon lanes and glowing towers. Reflexes rule here.'},
   kingdom: {name:'Kingdom Realm', icon:'🏰', featured:'memory', lmA:['Royal','Old','Iron','Golden','Kings','Stone','High','Crown'], lmB:['Keep','Tower','Gate','Bastion','Hall','Bridge','Citadel','Market'], enemies:['Raider band','Young dragon'], blurb:'Castles and cobbled roads. Memory rules here.'}
 };
+const WEAPONS = [
+  {id:'bow',    name:'Hunting Bow',   icon:'🏹', power:12, rate:.40, price:0},
+  {id:'xbow',   name:'Iron Crossbow', icon:'🎯', power:22, rate:.55, price:300},
+  {id:'staff',  name:'Ember Staff',   icon:'🔥', power:35, rate:.50, price:900},
+  {id:'cannon', name:'Storm Cannon',  icon:'⚡', power:60, rate:.80, price:2500}
+];
+const W_OF = id => WEAPONS.find(w => w.id === id);
+const BOSSES = {forest:'Blight Colossus', cyber:'The Overmind', kingdom:'Ancient Dragon'};
 const GAMES = [
   {id:'quiz', name:'Riddle Clash', icon:'📜', desc:'3 questions, 8 seconds each'},
   {id:'runes', name:'Rune Strike', icon:'✨', desc:'Tap the runes before they fade'},
@@ -316,6 +324,9 @@ function makeLandmarks(w, realm){
     const r = Math.random(), fac = r < .3 ? null : pick(FACTIONS).id;
     out.push({x:p[0], y:p[1], name: named ? named.name : pick(R2.lmA) + ' ' + pick(R2.lmB), owner: fac ? pick(AI_NAMES) : null, fac, ward:0, corrupted:false});
   }
+  // fortresses held by a realm boss; too strong for one player
+  const far = out.filter(l => !l.tutorial).sort((a, b) => dist(a.x, a.y, sx, sy) - dist(b.x, b.y, sx, sy));
+  [far[2], far[Math.floor(far.length*.6)]].forEach(l => { if(l){ l.boss = BOSSES[realm]; l.owner = null; l.fac = null; l.name = l.name + ' Fortress'; } });
   return out;
 }
 function randomPointNear(x, y, r){ const a = Math.random()*Math.PI*2, d = Math.random()*r; return [x + Math.cos(a)*d, y + Math.sin(a)*d]; }
@@ -330,7 +341,7 @@ function makeAgents(){
 }
 function makeEnemy(){
   const [sx, sy] = [S.player.x, S.player.y], [x, y] = randomPointNear(sx, sy, 300);
-  return {x, y, tx:x, ty:y, hp:1, phase: Math.random()*6, kind: pick(REALMS[S.realm].enemies)};
+  return {x, y, tx:x, ty:y, hp:1, phase: Math.random()*6, kind: pick(REALMS[S.realm].enemies), armor: 14 + Math.floor(Math.random()*12)};
 }
 
 /* ---------- canvas & camera ---------- */
@@ -439,8 +450,8 @@ function render(){
 function drawLandmark(l){
   const [x, y] = toScreen(l.x, l.y);
   if(x < -60 || x > W + 60 || y < -60 || y > H + 60) return;
-  const z = S.cam.zoom, col = l.corrupted ? '#7a3cff' : l.fac ? FAC(l.fac).color : '#e8e2c8';
-  const rad = Math.max(16, 18*z);
+  const z = S.cam.zoom, col = l.boss ? '#ff3b3b' : l.corrupted ? '#7a3cff' : l.fac ? FAC(l.fac).color : '#e8e2c8';
+  const rad = Math.max(16, 18*z)*(l.boss ? 1.7 : 1);
   const g = ctx.createRadialGradient(x, y, 2, x, y, rad);
   g.addColorStop(0, hexA(col, .55)); g.addColorStop(1, hexA(col, 0));
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rad, 0, 6.283); ctx.fill();
@@ -448,14 +459,15 @@ function drawLandmark(l){
   ctx.fillStyle = '#6d6a60'; ctx.beginPath(); ctx.ellipse(x, y + s*.9, s*1.2, s*.45, 0, 0, 6.283); ctx.fill();
   ctx.fillStyle = l.corrupted ? '#2a1640' : '#cfc8b0'; ctx.fillRect(x - s*.45, y - s*1.2, s*.9, s*2.1);
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y - s*1.35, s*.55 + Math.sin(S.t*3)*.6, 0, 6.283); ctx.fill();
-  if(l.owner === S.player.name && !l.corrupted){ ctx.strokeStyle = '#e8c66a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, s*2.1, 0, 6.283); ctx.stroke(); }
+  if(isMine(l)){ ctx.strokeStyle = l.team ? '#7be08a' : '#e8c66a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, s*2.1, 0, 6.283); ctx.stroke(); }
   if(l.ward > 0){ ctx.strokeStyle = 'rgba(140,220,255,.85)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.lineDashOffset = -S.t*10; ctx.beginPath(); ctx.arc(x, y, s*2.7, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); }
   if(S.raid && S.raid.lm === l){
     const pr = (S.t*2) % 1;
     ctx.strokeStyle = `rgba(255,80,80,${1 - pr})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, s*2 + pr*30, 0, 6.283); ctx.stroke();
     label(x, y - s*3.6, '⚠ Raid in ' + Math.ceil(S.raid.t) + 's', '#ff8a8a', 12, true);
   }
-  if(z >= 1.1 || l.owner === S.player.name) label(x, y + s*2.2 + 10, l.name + (l.corrupted ? ' (corrupted)' : ''), '#f6efd9', 11, false);
+  if(l.boss) label(x, y - s*3.2, '☠ ' + l.boss, '#ff9a9a', 11.5, true);
+  if(z >= 1.1 || isMine(l) || l.boss) label(x, y + s*2.2 + 10, l.name + (l.corrupted ? ' (corrupted)' : l.team && isMine(l) ? ' · team' : ''), '#f6efd9', 11, false);
 }
 function label(x, y, text, col, size, bold){
   ctx.font = `${bold ? 700 : 600} ${size}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -524,7 +536,7 @@ function updateHud(){
   else if(S.modeCooldown > 0){ mb.className = 'shield'; mb.textContent = '⏳ ' + Math.ceil(S.modeCooldown) + 's'; }
   else if(S.mode === 'alert'){ mb.className = 'alert'; mb.textContent = '⚡ Alert'; }
   else { mb.className = 'shield'; mb.textContent = '🛡️ Shielded'; }
-  store.set('player', {name:p.name, fac:p.fac, coins:p.coins, rank:p.rank, by:p.by, realms:Object.keys(S.realms).filter(k => S.realms[k].unlocked)});
+  store.set('player', {name:p.name, fac:p.fac, coins:p.coins, rank:p.rank, by:p.by, weapons:p.weapons, weapon:p.weapon, realms:Object.keys(S.realms).filter(k => S.realms[k].unlocked)});
   $('#realmBtn').textContent = REALMS[S.realm].icon + ' Realm';
 }
 
@@ -599,7 +611,7 @@ function signupWorld(){
 function startGame(world, kind){
   S.world = world; S.worldKind = kind;
   const pd = S.pending;
-  S.player = {name:pd.name, fac:pd.fac, by:pd.by, coins:pd.coins ?? 150, rank:pd.rank ?? 0, x:world.spawn[0], y:world.spawn[1], rx:world.spawn[0], ry:world.spawn[1], linked:true, tx:null, ty:null, dir:0, speedSamples:[]};
+  S.player = {name:pd.name, fac:pd.fac, by:pd.by, coins:pd.coins ?? 150, rank:pd.rank ?? 0, weapons:pd.weapons || ['bow'], weapon:pd.weapon || 'bow', x:world.spawn[0], y:world.spawn[1], rx:world.spawn[0], ry:world.spawn[1], linked:true, tx:null, ty:null, dir:0, speedSamples:[]};
   S.cam.x = S.player.x; S.cam.y = S.player.y;
   S.realm = 'forest';
   S.realms = {forest:{unlocked:true, landmarks:makeLandmarks(world, 'forest')}, cyber:{unlocked:false, landmarks:null}, kingdom:{unlocked:false, landmarks:null}};
@@ -661,6 +673,10 @@ function handleTap(sx, sy){
   const [wx, wy] = toWorld(sx, sy); walkTo(wx, wy);
 }
 const RANGE = 40;
+const isMine = l => !l.corrupted && (l.owner === S.player.name || !!(l.team && l.team.some(m => m.name === S.player.name)));
+const myShare = l => !isMine(l) ? 0 : l.team ? (l.team.find(m => m.name === S.player.name)?.share || 0) : 1;
+const myForce = () => W_OF(S.player.weapon).power + Math.floor(S.player.rank/10);
+const pct = x => Math.round(x*100) + '%';
 const reachFor = rank => clamp(50 + rank, 50, 500);
 function walkTo(x, y){
   const p = S.player;
@@ -690,73 +706,232 @@ const pdist = o => dist(S.player.x, S.player.y, o.x, o.y);
 
 /* ---------- landmarks ---------- */
 function openLandmark(l){
-  const d = Math.round(pdist(l)), near = d <= RANGE, mine = l.owner === S.player.name && !l.corrupted;
+  const d = Math.round(pdist(l)), near = d <= RANGE, mine = isMine(l);
   const fac = l.fac ? FAC(l.fac) : null;
   const raidHere = S.raid && S.raid.lm === l;
-  let owner = l.corrupted ? '<span style="color:#b98bff">Corrupted by blight</span>' : l.owner ? `<span style="color:${fac.color}">${esc(l.owner)}</span> · ${fac.name}` : 'Unclaimed';
-  let actions = '';
+  let owner = l.boss ? `<span style="color:#ff8a8a">☠ ${l.boss}</span>` : l.corrupted ? '<span style="color:#b98bff">Corrupted by blight</span>' : l.team ? `<span style="color:${fac.color}">Team of ${l.team.length}</span> · ${fac.name}` : l.owner ? `<span style="color:${fac.color}">${esc(l.owner)}</span> · ${fac.name}` : 'Unclaimed';
+  let actions = '', extra = '';
+  if(l.team) extra = `<div class="note" style="margin-top:8px">${l.team.map(m => `${m.name === S.player.name ? '<b>You</b>' : esc(m.name)} · ${pct(m.share)}`).join('<br>')}</div>`;
   if(!near) actions = `<button class="primary" data-a="walk">Walk here (${d} m away)</button><p class="center">You must be within ${RANGE} m to act here.</p>`;
   else if(S.vehicle) actions = `<p>🚗 Vehicle detected. Actions are off until you're on foot.</p>`;
   else if(mine){
-    actions = raidHere ? `<button class="primary" data-a="defend">⚔️ Defend against the raid</button>` : '';
+    actions = raidHere ? `<button class="primary" data-a="defend">🏹 Defend against the raid</button>` : '';
     actions += `<button data-a="ward" ${l.ward > 0 ? 'disabled' : ''}>🔷 Place a ward (20 🪙)${l.ward > 0 ? ' · active ' + Math.ceil(l.ward) + 's' : ''}</button>`;
+    if(l.team && l.team.length > 1){
+      actions += `<button data-a="sell">💰 Sell my ${pct(myShare(l))} share to the team (${shareValue(l, myShare(l))} 🪙)</button>`;
+      actions += l.team.filter(m => m.name !== S.player.name).map(m => `<button data-a="fightmate" data-n="${esc(m.name)}">⚔️ Fight ${esc(m.name)} for their ${pct(m.share)}</button>`).join('');
+    }
   }
-  else if(l.corrupted) actions = `<button class="primary" data-a="cleanse">🌿 Cleanse and claim</button>`;
+  else if(l.boss) actions = `<button class="primary" data-a="assault">☠ Assault the fortress</button><p class="center">Needs about ${bossArmor()} force. Bring strong weapons and call allies. The winning team shares the land.</p>`;
+  else if(l.corrupted) actions = `<button class="primary" data-a="cleanse">🏹 Cleanse and claim</button>`;
   else if(!l.owner) actions = `<button class="primary" data-a="claim">✋ Claim this landmark</button>`;
   else if(l.fac === S.player.fac) actions = `<button data-a="reinforce" ${l.ward > 0 ? 'disabled' : ''}>🤝 Reinforce for your faction${l.ward > 0 ? ' · shielded ' + Math.ceil(l.ward) + 's' : ' (+5 ⚔️)'}</button><p class="center">An ally holds this landmark. Reinforcing shields it from rival factions for 3 minutes.</p>`;
-  else actions = `<button class="primary" data-a="challenge">⚔️ Challenge for this landmark</button><p class="center">Taking a landmark is a duel against its keeper.</p>`;
+  else actions = `<button class="primary" data-a="battle">🏹 Battle the keeper (force ${keeperArmor(l)})</button><button data-a="challenge">🎲 Duel the keeper (mini-game)</button>`;
   const sh = sheet(`<h2>${esc(l.name)}</h2>
-    <div class="kv"><span>Keeper</span><span>${owner}</span></div>
+    <div class="kv"><span>Keeper</span><span>${owner}</span></div>${extra}
     <div class="kv"><span>Distance</span><span>${d} m</span></div>
-    ${mine ? `<div class="kv"><span>Income</span><span>+1 🪙 / 10 s</span></div>` : ''}
-    ${raidHere ? `<p style="color:#ff8a8a">⚠ Blight spirits strike in ${Math.ceil(S.raid.t)} s. Ward it or defend it in person.</p>` : ''}
+    ${mine ? `<div class="kv"><span>Your income</span><span>+${(myShare(l)*(l.fortress ? 3 : 1)).toFixed(1)} 🪙 / 10 s</span></div>` : ''}
+    ${raidHere ? `<p style="color:#ff8a8a">⚠ Raiders strike in ${Math.ceil(S.raid.t)} s. Ward it or defend it in person.</p>` : ''}
     <div class="stack">${actions}<button data-a="close">Close</button></div>`);
   sh.onclick = e => {
-    const a = e.target.closest('button')?.dataset.a; if(!a) return;
+    const btn = e.target.closest('button'), a = btn?.dataset.a; if(!a) return;
     if(a === 'close') return closeSheet();
     if(a === 'walk'){ closeSheet(); walkTo(l.x, l.y + 12); return; }
     if(a === 'ward'){ if(S.player.coins < 20) return toast('Not enough coins.', 'bad'); S.player.coins -= 20; l.ward = 120; updateHud(); closeSheet(); return notify('🔷 Ward placed on ' + l.name + ' for 2 minutes.', 'good'); }
     if(a === 'reinforce'){ closeSheet(); if(l.reinforcedAt > S.t - 300) return toast('Already reinforced recently. Try again later.'); l.reinforcedAt = S.t; l.ward = Math.max(l.ward, 180); S.player.rank += 5; updateHud(); return notify('🤝 You reinforced ' + l.name + '. Rival factions can\'t take it for 3 minutes. +5 ⚔️', 'good'); }
+    if(a === 'sell') return sellShare(l);
     closeSheet();
+    if(a === 'fightmate') return fightTeammate(l, btn.dataset.n, false);
     if(a === 'claim'){
-      startDuel({foe:'Forest guardian', foeFac:null, diff: l.tutorial ? 0 : 1, title:'Claim ' + l.name, stakes:'Win to become keeper of this landmark.',
+      startDuel({foe:'Realm guardian', foeFac:null, diff: l.tutorial ? 0 : 1, title:'Claim ' + l.name, stakes:'Win to become keeper of this landmark.',
         win(){ takeLandmark(l); }, lose(){ notify('The guardian held. Try again!', 'bad'); }});
     }
     if(a === 'cleanse'){
-      startDuel({foe:'Blight spirit', foeFac:null, diff:1, title:'Cleanse ' + l.name, stakes:'Win to purge the blight and claim it.', enemy:true,
-        win(){ l.corrupted = false; takeLandmark(l); }, lose(){ notify('The blight resists…', 'bad'); }});
+      startBattle({foe:pick(REALMS[S.realm].enemies), armor:25, title:'Cleanse ' + l.name, stakes:'Defeat it to purge the blight and claim the land.', allies:true,
+        win(team){ l.corrupted = false; takeLandmark(l, team); }, lose(){ notify('The blight resists…', 'bad'); }});
     }
     if(a === 'challenge'){
       startDuel({foe:l.owner, foeFac:l.fac, diff:1 + (Math.random() < .4 ? 1 : 0), title:'Take ' + l.name, stakes:'Win to take the landmark. Lose and you drop 5 ⚔️.',
         win(){ takeLandmark(l); }, lose(){ S.player.rank = Math.max(0, S.player.rank - 5); updateHud(); }});
     }
+    if(a === 'battle'){
+      startBattle({foe:l.team ? `${l.owner}'s team` : l.owner, foeFac:l.fac, armor:keeperArmor(l), title:'Battle for ' + l.name, stakes:'The winning team shares the land. Lose and you drop 5 ⚔️.', allies:true,
+        win(team){ takeLandmark(l, team); }, lose(){ S.player.rank = Math.max(0, S.player.rank - 5); updateHud(); }});
+    }
+    if(a === 'assault'){
+      startBattle({foe:l.boss, boss:true, armor:bossArmor(), title:'Assault ' + l.name, stakes:'Too strong to beat alone. The winning team shares the fortress (3× income).', allies:true,
+        win(team){ l.boss = null; l.fortress = true; takeLandmark(l, team, 120); }, lose(){ notify(`${l.boss} drove your team back. Bring more force.`, 'bad'); }});
+    }
     if(a === 'defend'){
-      startDuel({foe:'Blight raider', foeFac:null, diff:1, title:'Defend ' + l.name, stakes:'Win to repel the raid. Lose and the raid continues.', enemy:true,
+      startBattle({foe:'Raiders', armor:30, title:'Defend ' + l.name, stakes:'Defeat the raiders to save your land.', allies:true,
         win(){ S.raid = null; S.nextRaidIn = 70 + Math.random()*40; S.player.coins += 30; S.player.rank += 8; updateHud(); notify('🛡️ Raid repelled! +30 🪙 +8 ⚔️', 'good'); renderRaidbar(); },
         lose(){ notify('The raiders pushed through — find another way before the timer ends!', 'bad'); }});
     }
   };
 }
-function takeLandmark(l){
-  const first = !S.landmarks.some(x => x.owner === S.player.name);
+const keeperArmor = l => 18 + (l.name.length % 3)*12 + (l.team ? 15 : 0);
+const bossArmor = () => 140;
+const shareValue = (l, share) => Math.round(260*share*(l.fortress ? 3 : 1));
+function takeLandmark(l, team, bonus = 40){
+  const first = !S.landmarks.some(isMine);
+  team = team && team.length ? team : [{name:S.player.name, fac:S.player.fac}];
   l.owner = S.player.name; l.fac = S.player.fac; l.corrupted = false;
-  S.player.coins += 40; S.player.rank += 10; updateHud();
-  notify(`🏰 ${l.name} is yours! +40 🪙 +10 ⚔️`, 'gold');
-  if(first){ S.nextRaidIn = 45; setTimeout(() => notify('Owned landmarks earn coins, but blight spirits will raid them. Stay watchful.', ''), 1800); }
+  l.team = team.length > 1 ? team.map(m => ({name:m.name, share:1/team.length})) : null;
+  S.player.coins += bonus; S.player.rank += 10; updateHud();
+  notify(l.team ? `🏰 Your team of ${team.length} took ${l.name}! Your share: ${pct(1/team.length)}. +${bonus} 🪙 +10 ⚔️` : `🏰 ${l.name} is yours! +${bonus} 🪙 +10 ⚔️`, 'gold');
+  if(first){ S.nextRaidIn = 45; setTimeout(() => notify('Owned landmarks earn coins, but raiders will come for them. Stay watchful.', ''), 1800); }
+}
+function sellShare(l){
+  const share = myShare(l), value = shareValue(l, share);
+  const sh = sheet(`<h2>Sell your share?</h2><p>Your ${pct(share)} of <b>${esc(l.name)}</b> goes to your teammates, split by their current shares.</p>
+    <div class="kv"><span>You receive</span><span>${value} 🪙</span></div>
+    <div class="row"><button data-a="no">Keep it</button><button class="primary" data-a="yes">Sell</button></div>`);
+  sh.onclick = e => {
+    const a = e.target.closest('button')?.dataset.a; if(!a) return; closeSheet(); if(a !== 'yes') return;
+    const rest = l.team.filter(m => m.name !== S.player.name), tot = rest.reduce((t, m) => t + m.share, 0);
+    rest.forEach(m => m.share = m.share/tot);
+    l.team = rest.length > 1 ? rest : null; l.owner = rest[0].name;
+    S.player.coins += value; updateHud(); notify(`💰 Sold your share of ${l.name} for ${value} 🪙.`, 'gold');
+  };
+}
+function fightTeammate(l, name, theyAsked){
+  const mate = l.team.find(m => m.name === name); if(!mate) return;
+  const mine = myShare(l);
+  startDuel({foe:name, foeFac:l.fac, diff:1, title:'Team duel for ' + l.name, stakes:`Winner takes the loser's share (you ${pct(mine)}, ${name} ${pct(mate.share)}).`,
+    win(){ const me = l.team.find(m => m.name === S.player.name); me.share += mate.share; l.team = l.team.filter(m => m !== mate); if(l.team.length < 2){ l.team = null; l.owner = S.player.name; } notify(`🏆 You took ${name}'s share of ${l.name}.`, 'gold'); },
+    lose(){ mate.share += mine; l.team = l.team.filter(m => m.name !== S.player.name); l.owner = mate.name; if(l.team.length < 2) l.team = null; notify(`${name} took your share of ${l.name}.`, 'bad'); }});
 }
 
 /* ---------- enemies ---------- */
 function openEnemy(e){
   const d = Math.round(pdist(e));
-  const sh = sheet(`<h2>${e.kind}</h2><p>A creature of the blight, roaming the realm. Defeat it for coins.</p>
+  const sh = sheet(`<h2>${e.kind}</h2><p>A creature roaming the realm. Defeat it for coins.</p>
+    <div class="kv"><span>Strength</span><span>needs ~${e.armor} force</span></div>
+    <div class="kv"><span>Your force</span><span>${myForce()} (${W_OF(S.player.weapon).icon} ${W_OF(S.player.weapon).name})</span></div>
     <div class="kv"><span>Distance</span><span>${d} m</span></div>
-    <div class="stack">${d <= RANGE && !S.vehicle ? '<button class="primary" data-a="fight">⚔️ Fight (+15 🪙)</button>' : `<p class="center">Get within ${RANGE} m to fight.</p>`}<button data-a="close">Close</button></div>`);
+    <div class="stack">${d <= RANGE && !S.vehicle ? '<button class="primary" data-a="fight">🏹 Fight (+15 🪙)</button>' : `<p class="center">Get within ${RANGE} m to fight.</p>`}<button data-a="close">Close</button></div>`);
   sh.onclick = ev => {
     const a = ev.target.closest('button')?.dataset.a; if(!a) return; closeSheet();
-    if(a === 'fight') startDuel({foe:e.kind, foeFac:null, diff:0, title:'Banish the ' + e.kind.toLowerCase(), stakes:'Win for 15 🪙.', enemy:true,
-      win(){ S.enemies.splice(S.enemies.indexOf(e), 1); S.player.coins += 15; S.player.rank += 3; updateHud(); notify('✨ Banished! +15 🪙 +3 ⚔️', 'good'); setTimeout(() => S.enemies.push(makeEnemy()), 20000); },
-      lose(){ notify('It slipped away into the trees.', 'bad'); }});
+    if(a === 'fight') startBattle({foe:e.kind, armor:e.armor, title:'Hunt the ' + e.kind.toLowerCase(), stakes:'Win for 15 🪙.', allies:false,
+      win(){ S.enemies.splice(S.enemies.indexOf(e), 1); S.player.coins += 15; S.player.rank += 3; updateHud(); notify('✨ Defeated! +15 🪙 +3 ⚔️', 'good'); setTimeout(() => S.enemies.push(makeEnemy()), 20000); },
+      lose(){ notify('It slipped away.', 'bad'); }});
   };
+}
+
+/* ---------- shooting battles ---------- */
+function startBattle(o){
+  S.busy = true; duel.style.display = 'flex';
+  o.allies = o.allies ? [] : null; o.team = [{name:S.player.name, fac:S.player.fac}];
+  const foeCol = o.boss ? '#ff6b6b' : o.foeFac ? FAC(o.foeFac).color : '#c27bff';
+  const prep = () => {
+    const w = W_OF(S.player.weapon), mine = myForce(), allyF = (o.allies || []).reduce((t, a) => t + a.power, 0), total = mine + allyF;
+    const ratio = total/o.armor, verdict = ratio >= 1.15 ? ['Strong enough', 'var(--good)'] : ratio >= .8 ? ['Even fight', 'var(--gold)'] : ['Too weak — upgrade or call allies', 'var(--bad)'];
+    const owned = WEAPONS.filter(x => S.player.weapons.includes(x.id));
+    duel.innerHTML = `<div class="dhead"><span>${esc(o.title)}</span><span>🏹 Battle</span></div>
+      <div class="arena" style="justify-content:flex-start;overflow:auto">
+        <div class="center" style="font-size:13px;color:var(--quiet);margin-top:8px">You face</div>
+        <div class="big" style="color:${foeCol}">${o.boss ? '☠ ' : ''}${esc(o.foe)}</div>
+        <div class="kv"><span>Needs force</span><span>~${o.armor}</span></div>
+        <div class="kv"><span>Your force</span><span>${mine} · ${w.icon} ${w.name} (${w.power}) + rank bonus ${Math.floor(S.player.rank/10)}</span></div>
+        ${o.allies ? `<div class="kv"><span>Allies</span><span>${o.allies.length ? o.allies.map(a => esc(a.name) + ' ' + a.power).join(', ') : 'none yet'}</span></div>` : ''}
+        <div class="kv"><span>Team force</span><span style="color:${verdict[1]};font-weight:700">${total} · ${verdict[0]}</span></div>
+        <div class="timer" style="margin-top:10px"><i style="width:${Math.min(100, ratio*100)}%;background:${verdict[1]}"></i></div>
+        ${owned.length > 1 ? `<label>Weapon</label><div class="row" style="margin-top:0;flex-wrap:wrap">${owned.map(x => `<button data-w="${x.id}" class="${x.id === S.player.weapon ? 'primary' : ''}" style="flex:1 1 40%">${x.icon} ${x.name}</button>`).join('')}</div>` : `<p class="note">Stronger weapons are in the 🏹 Store armory.</p>`}
+        <p class="center" style="color:var(--quiet);font-size:13px">${esc(o.stakes)}</p>
+        <div class="stack">
+          <button class="primary" id="go">Start battle</button>
+          ${o.allies ? `<button id="call">📣 Call nearby allies</button><button id="summon">🛡️ Summon 2 faction fighters (25 🪙)</button>` : ''}
+          <button id="flee">Walk away</button>
+        </div>
+      </div>`;
+    duel.querySelectorAll('[data-w]').forEach(b => b.onclick = () => { S.player.weapon = b.dataset.w; updateHud(); prep(); });
+    $('#flee').onclick = () => endDuel();
+    $('#go').onclick = () => battleArena(o);
+    if(o.allies){
+      $('#call').onclick = () => {
+        const near = S.agents.filter(a => a.fac === S.player.fac && dist(a.x, a.y, S.player.x, S.player.y) < 300 && !o.allies.some(x => x.name === a.name));
+        if(!near.length){ toast('No faction allies within 300 m right now.'); return; }
+        near.slice(0, 3).forEach(a => o.allies.push({name:a.name, power:15 + a.skill*12 + Math.floor(Math.random()*8)}));
+        toast(`📣 ${near.slice(0, 3).map(a => a.name).join(', ')} answered the call!`, 'good'); prep();
+      };
+      $('#summon').onclick = () => {
+        if(S.player.coins < 25) return toast('Not enough coins.', 'bad');
+        S.player.coins -= 25; updateHud();
+        for(let i = 0; i < 2; i++){ let n; do n = pick(AI_NAMES); while(o.allies.some(x => x.name === n)); o.allies.push({name:n, power:18 + Math.floor(Math.random()*20)}); }
+        prep();
+      };
+    }
+  };
+  prep();
+}
+function battleArena(o){
+  const w = W_OF(S.player.weapon), allies = o.allies || [];
+  o.team = [{name:S.player.name, fac:S.player.fac}, ...allies.map(a => ({name:a.name, fac:S.player.fac}))];
+  const total = myForce() + allies.reduce((t, a) => t + a.power, 0);
+  const mult = clamp(Math.pow(total/o.armor, 1.2), .08, 1.6);
+  duel.innerHTML = `<div class="dhead"><span>${esc(o.title)}</span><span>${w.icon} ${w.name}</span></div><canvas id="bat" style="flex:1;width:100%;touch-action:none;border-radius:16px;margin-top:10px"></canvas>
+    <p class="center note" style="margin:8px 0 0">Tap the enemy to shoot · tap incoming orbs to destroy them</p>`;
+  const c = $('#bat'), g = c.getContext('2d');
+  const box = c.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2.5), BW = box.width, BH = box.height;
+  c.width = BW*dpr; c.height = BH*dpr; g.scale(dpr, dpr);
+  const maxHp = Math.round(80 + o.armor*2.2);
+  const E = {x:BW/2, y:BH*.3, r:o.boss ? 46 : 32, hp:maxHp}, inDmg = Math.round(6 + o.armor/10);
+  let me = 100, t = 45, cd = 0, atk = 1.5, tt = 0, over = false, hurt = 0;
+  const orbs = [], tracers = [], floats = [], allyCd = allies.map(() => .5 + Math.random());
+  const bg = THEMES[S.realm].bg;
+  c.onpointerdown = ev => {
+    if(over) return;
+    const r = c.getBoundingClientRect(), x = ev.clientX - r.left, y = ev.clientY - r.top;
+    const orb = orbs.find(b => dist(b.x, b.y, x, y) < 30);
+    if(orb){ orbs.splice(orbs.indexOf(orb), 1); floats.push({x, y, txt:'blocked', c:'#9fe8ff', t:0}); tracers.push({x0:BW/2, y0:BH - 20, x1:x, y1:y, t:0, c:'#9fe8ff'}); return; }
+    if(cd > 0) return;
+    cd = w.rate; tracers.push({x0:BW/2, y0:BH - 20, x1:x, y1:y, t:0, c:'#ffe28a'});
+    if(dist(x, y, E.x, E.y) < E.r + 16){ const dmg = Math.max(1, Math.round(w.power*mult*(.85 + Math.random()*.3))); E.hp -= dmg; floats.push({x, y:y - 10, txt:'-' + dmg, c:'#ffe28a', t:0}); }
+    else floats.push({x, y, txt:'miss', c:'#aaa', t:0});
+  };
+  let lastT = performance.now();
+  const frame = now => {
+    if(!c.isConnected || over) return;
+    const dt = Math.min(.05, (now - lastT)/1000); lastT = now; tt += dt; t -= dt; cd -= dt; hurt = Math.max(0, hurt - dt);
+    E.x = BW/2 + Math.sin(tt*.9)*BW*.32; E.y = BH*.28 + Math.sin(tt*1.7)*BH*.1;
+    atk -= dt;
+    if(atk <= 0){ atk = Math.max(.6, 2.2 - o.armor/110) * (.8 + Math.random()*.4); const tx = 30 + Math.random()*(BW - 60); orbs.push({x:E.x, y:E.y, vx:(tx - E.x)/1.9, vy:(BH - 10 - E.y)/1.9}); }
+    for(let i = orbs.length - 1; i >= 0; i--){ const b = orbs[i]; b.x += b.vx*dt; b.y += b.vy*dt; if(b.y > BH - 22){ orbs.splice(i, 1); me -= inDmg; hurt = .25; floats.push({x:b.x, y:BH - 40, txt:'-' + inDmg, c:'#ff7b7b', t:0}); } }
+    allies.forEach((a, i) => { allyCd[i] -= dt; if(allyCd[i] <= 0){ allyCd[i] = .9 + Math.random()*.5; const sx = 30 + (i + 1)*(BW - 60)/(allies.length + 1), dmg = Math.max(1, Math.round(a.power*mult*.8)); E.hp -= dmg; tracers.push({x0:sx, y0:BH - 14, x1:E.x, y1:E.y, t:0, c:'#7be08a'}); floats.push({x:E.x + 20, y:E.y - 20, txt:'-' + dmg, c:'#7be08a', t:0}); } });
+    // draw
+    g.fillStyle = bg; g.fillRect(0, 0, BW, BH);
+    const grd = g.createRadialGradient(BW/2, BH*.3, 10, BW/2, BH*.3, BH); grd.addColorStop(0, 'rgba(255,255,255,.08)'); grd.addColorStop(1, 'rgba(0,0,0,.35)'); g.fillStyle = grd; g.fillRect(0, 0, BW, BH);
+    // enemy
+    const er = E.r*(1 + Math.sin(tt*6)*.04), ec = o.boss ? '#c62828' : o.foeFac ? FAC(o.foeFac).color : '#7b2cbf';
+    const eg = g.createRadialGradient(E.x, E.y, 2, E.x, E.y, er*2); eg.addColorStop(0, hexA(ec.length === 7 ? ec : '#7b2cbf', .55)); eg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = eg; g.beginPath(); g.arc(E.x, E.y, er*2, 0, 6.283); g.fill();
+    g.fillStyle = '#140a1c'; g.beginPath(); g.arc(E.x, E.y, er, 0, 6.283); g.fill(); g.strokeStyle = ec; g.lineWidth = 3; g.stroke();
+    if(o.boss){ g.fillStyle = '#ffd34d'; g.beginPath(); g.moveTo(E.x - er*.6, E.y - er*.85); g.lineTo(E.x - er*.35, E.y - er*1.35); g.lineTo(E.x, E.y - er*.95); g.lineTo(E.x + er*.35, E.y - er*1.35); g.lineTo(E.x + er*.6, E.y - er*.85); g.fill(); }
+    g.fillStyle = '#ff5c8a'; g.beginPath(); g.arc(E.x - er*.35, E.y - er*.15, er*.13, 0, 6.283); g.arc(E.x + er*.35, E.y - er*.15, er*.13, 0, 6.283); g.fill();
+    // orbs
+    for(const b of orbs){ const og = g.createRadialGradient(b.x, b.y, 1, b.x, b.y, 16); og.addColorStop(0, '#ffb4f0'); og.addColorStop(.5, '#c03ad8'); og.addColorStop(1, 'rgba(120,0,140,0)'); g.fillStyle = og; g.beginPath(); g.arc(b.x, b.y, 16, 0, 6.283); g.fill(); }
+    // tracers
+    for(let i = tracers.length - 1; i >= 0; i--){ const r = tracers[i]; r.t += dt; if(r.t > .14){ tracers.splice(i, 1); continue; } g.strokeStyle = r.c; g.globalAlpha = 1 - r.t/.14; g.lineWidth = 3; g.beginPath(); g.moveTo(r.x0, r.y0); g.lineTo(r.x1, r.y1); g.stroke(); g.globalAlpha = 1; }
+    // floaters
+    g.font = '700 15px Inter, sans-serif'; g.textAlign = 'center';
+    for(let i = floats.length - 1; i >= 0; i--){ const f = floats[i]; f.t += dt; if(f.t > .8){ floats.splice(i, 1); continue; } g.globalAlpha = 1 - f.t/.8; g.fillStyle = f.c; g.fillText(f.txt, f.x, f.y - f.t*40); g.globalAlpha = 1; }
+    // allies + player
+    allies.forEach((a, i) => { const sx = 30 + (i + 1)*(BW - 60)/(allies.length + 1); g.fillStyle = '#7be08a'; g.beginPath(); g.arc(sx, BH - 12, 6, 0, 6.283); g.fill(); g.font = '600 10px Inter'; g.fillStyle = '#cfe8d3'; g.fillText(a.name, sx, BH - 24); });
+    g.fillStyle = FAC(S.player.fac).color; g.beginPath(); g.arc(BW/2, BH - 14, 10, 0, 6.283); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 2; g.stroke();
+    // bars
+    const bar = (x, y, wd, v, col, txt) => { g.fillStyle = 'rgba(0,0,0,.5)'; g.fillRect(x, y, wd, 10); g.fillStyle = col; g.fillRect(x, y, wd*clamp(v, 0, 1), 10); g.font = '600 11px Inter'; g.fillStyle = '#fff'; g.textAlign = 'left'; g.fillText(txt, x, y - 4); g.textAlign = 'center'; };
+    bar(12, 22, BW - 24, E.hp/maxHp, ec, `${o.foe} · ${Math.max(0, Math.ceil(E.hp))}/${maxHp}`);
+    bar(12, BH - 58, BW*.45, me/100, '#7be08a', `You · ${Math.max(0, me)}`);
+    g.font = '700 14px Inter'; g.textAlign = 'right'; g.fillStyle = t < 10 ? '#ff8a8a' : '#fff'; g.fillText(Math.ceil(t) + 's', BW - 12, BH - 48); g.textAlign = 'center';
+    if(cd > 0){ g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(BW/2 - 20, BH - 34, 40*(cd/w.rate), 3); }
+    if(hurt > 0){ g.fillStyle = `rgba(255,0,0,${hurt})`; g.fillRect(0, 0, BW, BH); }
+    if(E.hp <= 0 || me <= 0 || t <= 0){
+      over = true; const won = E.hp <= 0;
+      return setTimeout(() => duelResult(o, won, won ? (allies.length ? `Your team of ${allies.length + 1} brought down ${esc(o.foe)}.` : `You brought down ${esc(o.foe)}.`) : me <= 0 ? 'You were overwhelmed. More force or allies would help.' : 'Time ran out. More force would finish it faster.'), 500);
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
 }
 
 /* ---------- encounters with AI players ---------- */
@@ -814,7 +989,7 @@ function renderRaidbar(){
 function resolveRaid(){
   const l = S.raid.lm; S.raid = null; S.nextRaidIn = 60 + Math.random()*50;
   if(l.ward > 0){ S.player.coins += 10; notify(`🔷 Your ward held! ${l.name} is safe. +10 🪙`, 'good'); }
-  else if(l.owner === S.player.name){ l.corrupted = true; l.owner = null; l.fac = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} fell to the blight. Cleanse it to win it back.`, 'bad'); }
+  else if(isMine(l)){ l.corrupted = true; l.owner = null; l.fac = null; l.team = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} fell to the blight. Cleanse it to win it back.`, 'bad'); }
   updateHud(); renderRaidbar();
 }
 
@@ -849,7 +1024,7 @@ function endDuel(){ duel.style.display = 'none'; duel.innerHTML = ''; S.busy = !
 function duelResult(o, won, detail){
   duel.innerHTML = `<div class="arena"><div class="big" style="font-size:44px">${won ? 'Victory' : 'Defeat'}</div>
     <p class="center" style="color:var(--quiet)">${detail}</p><div class="stack" style="margin-top:24px"><button class="primary" id="done">Back to the realm</button></div></div>`;
-  $('#done').onclick = () => { endDuel(); won ? o.win() : o.lose(); };
+  $('#done').onclick = () => { endDuel(); won ? o.win(o.team) : o.lose(); };
 }
 function scoreboard(o, a, b){
   return `<div class="vs"><div class="fighter"><div class="nm" style="color:${FAC(S.player.fac).color}">${esc(S.player.name)}</div><div class="sc" id="sa">${a}</div></div><div class="vsx">vs</div><div class="fighter"><div class="nm">${esc(o.foe)}</div><div class="sc" id="sb">${b}</div></div></div>`;
@@ -941,12 +1116,18 @@ $('#modeBtn').onclick = () => {
 };
 $('#storeBtn').onclick = () => {
   const packs = [['Pouch', 100, '0.99'], ['Bag', 550, '4.99'], ['Chest', 1200, '9.99'], ['Vault', 6500, '49.99']];
-  const sh = sheet(`<h2>Coin store</h2><p>Spend coins on wards, game re-rolls and cosmetics. Rank and draft order can never be bought.</p>
+  const armory = WEAPONS.map(w => { const own = S.player.weapons.includes(w.id), eq = S.player.weapon === w.id;
+    return `<div class="pack"><div><b>${w.icon} ${w.name}</b><br><small>Power ${w.power} · ${(1/w.rate).toFixed(1)} shots/s</small></div>${eq ? '<small style="color:var(--gold)">Equipped</small>' : own ? `<button data-eq="${w.id}">Equip</button>` : `<button data-buy="${w.id}">${w.price.toLocaleString()} 🪙</button>`}</div>`; }).join('');
+  const sh = sheet(`<h2>Armory</h2><p>Your force = weapon power + 1 per 10 rank. Strong enemies and fortresses need more force than one player has — bring allies.</p>
+    <div class="stack" style="margin-top:6px">${armory}</div>
+    <h2 style="margin-top:18px">Coin store</h2><p>Spend coins on weapons, wards and re-rolls. Rank and draft order can never be bought.</p>
     <div class="pack" style="border-color:var(--gold)"><div><b>Starter offer</b><br><small>500 🪙 + Moonlit skin · once</small></div><button class="primary" data-c="500" data-p="1.99">$1.99</button></div>
     <div class="stack">${packs.map(p => `<div class="pack"><div><b>${p[0]}</b><br><small>${p[1].toLocaleString()} 🪙</small></div><button data-c="${p[1]}" data-p="${p[2]}">$${p[2]}</button></div>`).join('')}</div>
     <p class="note">Prototype: no real payment is taken. The real app uses Google Play Billing and Apple StoreKit.</p><div class="row"><button data-x="1">Close</button></div>`);
   sh.onclick = e => {
     const b = e.target.closest('button'); if(!b) return; if(b.dataset.x) return closeSheet();
+    if(b.dataset.eq){ S.player.weapon = b.dataset.eq; updateHud(); closeSheet(); return $('#storeBtn').onclick(); }
+    if(b.dataset.buy){ const w = W_OF(b.dataset.buy); if(S.player.coins < w.price) return toast('Not enough coins — buy a coin pack below.', 'bad'); S.player.coins -= w.price; S.player.weapons.push(w.id); S.player.weapon = w.id; updateHud(); toast(`${w.icon} ${w.name} equipped! Force is now ${myForce()}.`, 'gold'); closeSheet(); return $('#storeBtn').onclick(); }
     const c = +b.dataset.c, p = b.dataset.p;
     const s2 = sheet(`<h2>Confirm purchase</h2><div class="kv"><span>Item</span><span>${c.toLocaleString()} 🪙</span></div><div class="kv"><span>Price</span><span>$${p}</span></div>
       <p class="note">In the real app this is the Face ID / fingerprint confirmation from the app store. Nothing is charged in this prototype.</p>
@@ -974,7 +1155,7 @@ function acceptInvite(inv){
 }
 $('#realmBtn').onclick = () => {
   const R0 = REALMS[S.realm];
-  const mine = S.landmarks.filter(l => l.owner === S.player.name && !l.corrupted).length;
+  const mine = S.landmarks.filter(isMine).length;
   const counts = FACTIONS.map(f => [f, S.landmarks.filter(l => l.fac === f.id && !l.corrupted).length]);
   const rows = Object.keys(REALMS).map(k => {
     const r = REALMS[k], st = S.realms[k], inv = S.invites.find(i => i.realm === k);
@@ -1079,19 +1260,33 @@ function update(dt){
   for(const l of S.landmarks) if(l.ward > 0) l.ward = Math.max(0, l.ward - dt);
   // income
   S.incomeT += dt;
-  if(S.incomeT >= 10){ S.incomeT = 0; const n = S.landmarks.filter(l => l.owner === p.name && !l.corrupted).length; if(n){ p.coins += n; updateHud(); } }
+  if(S.incomeT >= 10){ S.incomeT = 0; const n = S.landmarks.reduce((t, l) => t + myShare(l)*(l.fortress ? 3 : 1), 0); p.carry = (p.carry || 0) + n; if(p.carry >= 1){ p.coins += Math.floor(p.carry); p.carry -= Math.floor(p.carry); updateHud(); } }
   // AI factions shift the map
   S.aiT += dt;
-  if(S.aiT > 25){ S.aiT = 0; const cand = S.landmarks.filter(l => l.owner !== p.name && !l.tutorial && !(l.ward > 0) && pdist(l) > 80); if(cand.length){ const l = pick(cand); const f = pick(FACTIONS); if(l.corrupted && Math.random() < .5){ l.corrupted = false; } l.fac = f.id; l.owner = pick(AI_NAMES); } }
+  if(S.aiT > 25){ S.aiT = 0; const cand = S.landmarks.filter(l => !isMine(l) && !l.tutorial && !l.boss && !(l.ward > 0) && pdist(l) > 80); if(cand.length){ const l = pick(cand); const f = pick(FACTIONS); if(l.corrupted && Math.random() < .5){ l.corrupted = false; } l.fac = f.id; l.owner = pick(AI_NAMES); } }
   // AI challenges
   if(!S.busy && S.mode === 'alert' && !S.vehicle){
     S.challengeT -= dt;
     if(S.challengeT <= 0){ S.challengeT = 25 + Math.random()*20; const a = nearestAgent(); if(a && a.fac !== p.fac && a.mode === 'alert' && Math.random() < .55) incomingChallenge(a); }
   }
+  // AI teammates sometimes ask to fight you for your share
+  S.mateT = (S.mateT ?? 70) - dt;
+  if(S.mateT <= 0 && !S.busy && !S.vehicle){
+    S.mateT = 80 + Math.random()*40;
+    const tl = S.landmarks.find(l => isMine(l) && l.team && l.team.length > 1);
+    if(tl){
+      const mate = pick(tl.team.filter(m => m.name !== p.name)); let t = 30;
+      const sh = sheet(`<h2>⚔️ Team challenge</h2><p><b>${esc(mate.name)}</b> asks to fight you for your share of <b>${esc(tl.name)}</b>.</p>
+        <div class="kv"><span>Stakes</span><span>winner takes the loser's share</span></div><div class="kv"><span>Respond within</span><span id="cd2">30 s</span></div>
+        <div class="row"><button data-a="no">Decline</button><button class="primary" data-a="yes">Accept</button></div>`);
+      const iv = setInterval(() => { t--; const c = sh.querySelector('#cd2'); if(c) c.textContent = t + ' s'; if(t <= 0){ clearInterval(iv); closeSheet(); } }, 1000);
+      sh.onclick = e => { const a = e.target.closest('button')?.dataset.a; if(!a) return; clearInterval(iv); closeSheet(); if(a === 'yes') fightTeammate(tl, mate.name, true); else notify('You declined. Your share stays yours.'); };
+    }
+  }
   // raids
-  const owned = S.landmarks.filter(l => l.owner === p.name && !l.corrupted);
-  if(!S.raid && owned.length){ S.nextRaidIn -= dt; if(S.nextRaidIn <= 0){ S.raid = {lm: pick(owned), t: 60}; notify(`⚠ Blight spirits will raid ${S.raid.lm.name} in 60 s! Ward it or defend it.`, 'bad'); } }
-  if(S.raid){ S.raid.t -= dt; if(S.raid.lm.owner !== p.name){ S.raid = null; } else if(S.raid.t <= 0) resolveRaid(); }
+  const owned = S.landmarks.filter(isMine);
+  if(!S.raid && owned.length){ S.nextRaidIn -= dt; if(S.nextRaidIn <= 0){ S.raid = {lm: pick(owned), t: 60}; notify(`⚠ Raiders will strike ${S.raid.lm.name} in 60 s! Ward it or defend it.`, 'bad'); } }
+  if(S.raid){ S.raid.t -= dt; if(!isMine(S.raid.lm)){ S.raid = null; } else if(S.raid.t <= 0) resolveRaid(); }
   // realm portal cooldown and invitations from players already inside other realms
   if(S.portalCD > 0) S.portalCD -= dt;
   if(!S.busy && !S.vehicle){
