@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>RealmDom — Forest Realm prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--panel:rgba(14,22,17,.92);--edge:rgba(214,190,128,.35);--gold:#e8c66a;--ink:#f1ead6;--quiet:#b9b29c;--bad:#ff6b6b;--good:#7be08a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d1510;color:var(--ink);font-family:Inter,system-ui,sans-serif;font-size:15px;user-select:none;-webkit-user-select:none}
+canvas#map{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+.title{font-family:Cinzel,serif;letter-spacing:.04em}
+button{font:inherit;color:var(--ink);background:rgba(232,198,106,.12);border:1px solid var(--edge);border-radius:12px;padding:10px 14px;cursor:pointer}
+button:active{transform:scale(.97)}
+button.primary{background:linear-gradient(#e8c66a,#c9a24a);color:#1b1408;border:none;font-weight:700}
+button.danger{background:rgba(255,107,107,.15);border-color:rgba(255,107,107,.5)}
+button:disabled{opacity:.45}
+#hud{position:fixed;left:8px;right:8px;top:8px;display:flex;gap:8px;align-items:center;z-index:5;pointer-events:none}
+#hud>*{pointer-events:auto}
+.chip{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:7px 10px;display:flex;align-items:center;gap:6px;font-weight:600;font-size:13px;white-space:nowrap}
+#who{flex:1;min-width:0;overflow:hidden}
+#who .nm{overflow:hidden;text-overflow:ellipsis}
+.dot{width:10px;height:10px;border-radius:50%;flex:none}
+#modeBtn{padding:7px 10px;font-size:13px;font-weight:700;border-radius:14px}
+#modeBtn.alert{background:rgba(255,180,60,.2);border-color:#ffb43c}
+#modeBtn.shield{background:rgba(90,170,255,.18);border-color:#5aaaff}
+#banner{position:fixed;left:8px;right:8px;top:54px;z-index:4;display:none}
+.card{background:var(--panel);border:1px solid var(--edge);border-radius:14px;padding:10px 12px;display:flex;align-items:center;gap:10px}
+.card .tx{flex:1;font-size:13.5px;line-height:1.35}
+.card.vehicle{border-color:var(--bad);background:rgba(60,14,14,.92)}
+#raidbar{position:fixed;left:8px;right:8px;top:54px;z-index:4;display:none}
+#toasts{position:fixed;left:8px;right:64px;bottom:calc(66px + env(safe-area-inset-bottom));z-index:30;display:flex;flex-direction:column;gap:6px;max-width:420px;pointer-events:none}
+.toast{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:8px 11px;font-size:12.5px;line-height:1.35;animation:tin .25s ease}
+.toast.good{border-color:var(--good)}.toast.bad{border-color:var(--bad)}.toast.gold{border-color:var(--gold)}
+@keyframes tin{from{opacity:0;transform:translateY(-6px)}}
+#bottom{position:fixed;left:8px;right:8px;bottom:calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:5;align-items:flex-end}
+#bottom .grow{flex:1}
+#bottom button{background:var(--panel);font-size:13px;font-weight:600;padding:10px 12px}
+#zoom{display:flex;flex-direction:column;gap:6px}
+#zoom button{width:44px;height:40px;padding:0;font-size:18px}
+#recenter{display:none}
+.overlay{position:fixed;inset:0;z-index:20;background:rgba(5,9,6,.6);display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:min(100%,520px);max-height:88vh;overflow:auto;background:linear-gradient(#18241b,#101812);border:1px solid var(--edge);border-bottom:none;border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));animation:sin .25s ease}
+@keyframes sin{from{transform:translateY(30px);opacity:.4}}
+.sheet h2{margin:0 0 4px;font-family:Cinzel,serif;font-size:21px;color:var(--gold)}
+.sheet p{margin:6px 0;color:var(--quiet);line-height:1.45;font-size:14px}
+.row{display:flex;gap:8px;margin-top:12px}
+.row>button{flex:1}
+.stack{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.kv{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(214,190,128,.12);font-size:14px}
+.kv span:first-child{color:var(--quiet)}
+#screen{position:fixed;inset:0;z-index:40;background:radial-gradient(ellipse at 50% 20%,#24432a 0%,#0d1510 70%);display:flex;align-items:center;justify-content:center;padding:20px;overflow:auto}
+.signup{width:min(100%,420px)}
+.logo{font-family:Cinzel,serif;font-size:42px;text-align:center;color:var(--gold);text-shadow:0 0 24px rgba(232,198,106,.4);margin-bottom:2px}
+.tag{text-align:center;color:var(--quiet);margin-bottom:22px}
+.signin{display:flex;align-items:center;justify-content:center;gap:10px;font-weight:600;padding:13px}
+.signin.apple{background:#f5f5f5;color:#111;border:none}
+.signin.google{background:#fff;color:#222;border:none}
+input,select{font:inherit;width:100%;padding:12px;border-radius:12px;border:1px solid var(--edge);background:rgba(0,0,0,.35);color:var(--ink)}
+label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.fcard{border:2px solid transparent;background:rgba(0,0,0,.3);border-radius:14px;padding:12px;text-align:left;cursor:pointer}
+.fcard.sel{border-color:var(--gold);background:rgba(232,198,106,.1)}
+.fcard b{display:block;margin:6px 0 2px}
+.fcard small{color:var(--quiet);font-size:12px}
+.note{font-size:12px;color:var(--quiet);margin-top:10px;line-height:1.4}
+#duel{position:fixed;inset:0;z-index:25;background:radial-gradient(ellipse at 50% 30%,#1f3524,#070b08 75%);display:none;flex-direction:column;padding:16px;padding-top:calc(16px + env(safe-area-inset-top))}
+.dhead{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--quiet)}
+.vs{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0}
+.fighter{flex:1;text-align:center}
+.fighter .nm{font-weight:700;font-size:15px}
+.fighter .sc{font-family:Cinzel,serif;font-size:34px;color:var(--gold)}
+.vsx{font-family:Cinzel,serif;color:var(--quiet)}
+.arena{flex:1;position:relative;display:flex;flex-direction:column;justify-content:center;min-height:0}
+.qtext{font-size:19px;font-weight:600;text-align:center;margin-bottom:18px;line-height:1.35}
+.opts{display:grid;gap:10px}
+.opt{padding:14px;text-align:left;font-size:16px;border-radius:14px;background:rgba(255,255,255,.05)}
+.opt.right{border-color:var(--good);background:rgba(123,224,138,.18)}
+.opt.wrong{border-color:var(--bad);background:rgba(255,107,107,.15)}
+.timer{height:6px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;margin-bottom:16px}
+.timer i{display:block;height:100%;background:var(--gold);width:100%}
+.ai-note{text-align:center;color:var(--quiet);font-size:13px;min-height:20px;margin-top:12px}
+.rune{position:absolute;width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:30px;background:radial-gradient(circle,#ffe9a8,#e8a63a 60%,rgba(232,166,58,0) 72%);animation:pop .15s ease;cursor:pointer}
+@keyframes pop{from{transform:scale(.4)}}
+.mem{display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:320px;margin:0 auto;width:100%}
+.mem button{height:110px;font-size:40px;border-radius:18px;background:rgba(255,255,255,.06)}
+.mem button.lit{background:rgba(232,198,106,.55);box-shadow:0 0 24px rgba(232,198,106,.6)}
+.big{font-family:Cinzel,serif;font-size:34px;text-align:center;color:var(--gold);margin:10px 0}
+.center{text-align:center}
+.pack{display:flex;align-items:center;justify-content:space-between;padding:12px;border:1px solid var(--edge);border-radius:14px;background:rgba(0,0,0,.25)}
+.pack b{font-size:15px}.pack small{color:var(--quiet)}
+.toggle{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid rgba(214,190,128,.12)}
+.sw{width:50px;height:30px;border-radius:15px;background:#333;position:relative;border:none;padding:0}
+.sw::after{content:'';position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#ddd;transition:left .2s}
+.sw.on{background:var(--gold)}.sw.on::after{left:23px}
+</style>
+</head>
+<body>
+<canvas id="map"></canvas>
+
+<div id="hud">
+  <div class="chip" id="who"><span class="dot" id="whoDot"></span><span class="nm" id="whoName">—</span></div>
+  <div class="chip" title="Coins">🪙 <span id="coins">0</span></div>
+  <div class="chip" title="Rank points">⚔️ <span id="rank">0</span></div>
+  <button id="modeBtn" class="alert">⚡ Alert</button>
+</div>
+<div id="banner"></div>
+<div id="raidbar"></div>
+<div id="toasts"></div>
+<div id="bottom">
+  <button id="storeBtn">🪙 Store</button>
+  <button id="realmBtn">🌲 Realm</button>
+  <button id="setBtn">⚙️</button>
+  <div class="grow"></div>
+  <div id="zoom"><button id="recenter" title="Recenter">◎</button><button id="zin">+</button><button id="zout">−</button></div>
+</div>
+<div id="duel"></div>
+<div id="screen"></div>
+
+<script>
+'use strict';
+/* ---------- utilities ---------- */
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let rng = mulberry32(20261031);
+const R = () => rng();
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const store = {
+  get(k){try{return JSON.parse(localStorage.getItem('realmdom.' + k))}catch(e){return null}},
+  set(k, v){try{localStorage.setItem('realmdom.' + k, JSON.stringify(v))}catch(e){}}
+};
+function esc(s){return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+/* ---------- game data ---------- */
+const FACTIONS = [
+  {id:'verdant', name:'Verdant Circle', color:'#5fd16a', motto:'Grow, heal, endure', icon:'🌿'},
+  {id:'ember',   name:'Ember Court',    color:'#ff7a3d', motto:'Strike first, burn bright', icon:'🔥'},
+  {id:'tide',    name:'Tide Wardens',   color:'#3fb6ff', motto:'Patience wins wars', icon:'🌊'},
+  {id:'veil',    name:'Night Veil',     color:'#b07cff', motto:'Unseen, unstoppable', icon:'🌙'}
+];
+const FAC = id => FACTIONS.find(f => f.id === id);
+const AI_NAMES = ['Kael','Mira','Thorne','Lyra','Bram','Seren','Oren','Isolde','Fenn','Nyx','Rowan','Ash','Talia','Corin','Wren','Eamon','Sable','Juno','Ilya','Vesper'];
+const NAME_A = ['Swift','Silent','Amber','Iron','Moss','Storm','Pale','Wild','Ember','Frost','Shadow','Bright'];
+const NAME_B = ['Fox','Warden','Rook','Hawk','Thorn','Wolf','Sage','Ranger','Moth','Viper','Stag','Owl'];
+const LM_A = ['Mossy','Elder','Whispering','Sunken','Silver','Hollow','Thorn','Amber','Misty','Ancient','Glimmer','Old'];
+const LM_B = ['Shrine','Fountain','Oak','Stone Circle','Well','Watchtower','Gate','Grove','Altar','Bridge','Monolith','Spring'];
+const QUIZ = [
+  ['Which planet is known as the Red Planet?', ['Mars','Venus','Jupiter','Mercury'], 0],
+  ['How many continents are there on Earth?', ['5','6','7','8'], 2],
+  ['What gas do plants absorb from the air?', ['Oxygen','Carbon dioxide','Nitrogen','Helium'], 1],
+  ['What is the largest ocean on Earth?', ['Atlantic','Indian','Arctic','Pacific'], 3],
+  ['How many legs does a spider have?', ['6','8','10','12'], 1],
+  ['What is the chemical symbol for gold?', ['Gd','Go','Au','Ag'], 2],
+  ['Which is the longest river in Africa?', ['Congo','Niger','Zambezi','Nile'], 3],
+  ['What is the hardest natural substance?', ['Quartz','Diamond','Iron','Granite'], 1],
+  ['Which animal is the tallest in the world?', ['Elephant','Giraffe','Camel','Moose'], 1],
+  ['How many minutes are in a full day?', ['1,240','1,440','1,640','1,840'], 1],
+  ['What is the capital of Japan?', ['Kyoto','Osaka','Tokyo','Nagoya'], 2],
+  ['What do bees collect to make honey?', ['Pollen','Nectar','Sap','Dew'], 1],
+  ['Which is the smallest prime number?', ['0','1','2','3'], 2],
+  ['What is 9 × 7?', ['56','63','72','67'], 1],
+  ['What is frozen water called?', ['Steam','Ice','Mist','Frost'], 1],
+  ['Which tree produces acorns?', ['Pine','Maple','Oak','Birch'], 2],
+  ['Which bird is a symbol of wisdom in many tales?', ['Crow','Owl','Eagle','Swan'], 1],
+  ['How many sides does a hexagon have?', ['5','6','7','8'], 1],
+  ['What is the closest star to Earth?', ['Sirius','Polaris','The Sun','Alpha Centauri'], 2],
+  ['Which metal is liquid at room temperature?', ['Mercury','Lead','Tin','Zinc'], 0],
+  ['What is the largest mammal?', ['Elephant','Blue whale','Orca','Hippo'], 1],
+  ['In which country are the pyramids of Giza?', ['Mexico','Peru','Egypt','Sudan'], 2],
+  ['What is 15% of 200?', ['15','20','30','35'], 2],
+  ['Which organ pumps blood through the body?', ['Lungs','Liver','Heart','Kidney'], 2],
+  ['Which color do you get by mixing blue and yellow?', ['Purple','Green','Orange','Brown'], 1],
+  ['How many players are on a soccer team on the field?', ['9','10','11','12'], 2],
+  ['What is the boiling point of water at sea level?', ['90 °C','100 °C','110 °C','120 °C'], 1],
+  ['Which is the largest desert in the world, including polar?', ['Sahara','Gobi','Antarctic','Arabian'], 2],
+  ['What do caterpillars turn into?', ['Beetles','Moths or butterflies','Bees','Dragonflies'], 1],
+  ['Which instrument has 88 keys?', ['Organ','Accordion','Piano','Harpsichord'], 2],
+  ['What is the square root of 144?', ['11','12','13','14'], 1],
+  ['Which planet has the most famous rings?', ['Saturn','Mars','Earth','Mercury'], 0],
+  ['How many hours are in a week?', ['148','158','168','178'], 2],
+  ['Which sea creature has three hearts?', ['Shark','Octopus','Dolphin','Crab'], 1],
+  ['Which language has the most native speakers?', ['English','Spanish','Mandarin Chinese','Hindi'], 2],
+  ['What is the main ingredient of hummus?', ['Lentils','Chickpeas','Beans','Peas'], 1]
+];
+const REALMS = {
+  forest:  {name:'Forest Realm',  icon:'🌲', featured:'quiz',   lmA:LM_A, lmB:LM_B, enemies:['Blight spirit','Shadow wolf'], blurb:'Paths, woods and glades. Riddles rule here.'},
+  cyber:   {name:'Cyber Realm',   icon:'💠', featured:'runes',  lmA:['Neon','Ghost','Quantum','Static','Chrome','Signal','Null','Hex'], lmB:['Node','Relay','Core','Terminal','Spire','Hub','Gateway','Array'], enemies:['Rogue AI','Virus swarm'], blurb:'Neon lanes and glowing towers. Reflexes rule here.'},
+  kingdom: {name:'Kingdom Realm', icon:'🏰', featured:'memory', lmA:['Royal','Old','Iron','Golden','Kings','Stone','High','Crown'], lmB:['Keep','Tower','Gate','Bastion','Hall','Bridge','Citadel','Market'], enemies:['Raider band','Young dragon'], blurb:'Castles and cobbled roads. Memory rules here.'}
+};
+const GAMES = [
+  {id:'quiz', name:'Riddle Clash', icon:'📜', desc:'3 questions, 8 seconds each'},
+  {id:'runes', name:'Rune Strike', icon:'✨', desc:'Tap the runes before they fade'},
+  {id:'memory', name:'Spirit Echo', icon:'🌀', desc:'Repeat the spirit sequence'}
+];
+
+/* ---------- state ---------- */
+const S = {
+  player: null, mode: 'alert', modeCooldown: 0, vehicle: false, simDriving: false,
+  world: null, worldKind: 'demo', landmarks: [], agents: [], enemies: [], raid: null, nextRaidIn: 50,
+  cam: {x:0, y:0, zoom:1.8, free:false}, busy:false, t:0, gps:null, heldNotices:[],
+  cooldowns: new Map(), incomeT: 0, aiT: 0, challengeT: 12, tapMove: true,
+  realm: 'forest', realms: {}, invites: [], portalCD: 0, inviteT: 40
+};
+
+/* ---------- world: projection & building ---------- */
+function bboxOf(pts){let a=1e9,b=1e9,c=-1e9,d=-1e9;for(const p of pts){a=Math.min(a,p[0]);b=Math.min(b,p[1]);c=Math.max(c,p[0]);d=Math.max(d,p[1])}return[a,b,c,d]}
+function pip(x, y, pts){let ins=false;for(let i=0,j=pts.length-1;i<pts.length;j=i++){const[xi,yi]=pts[i],[xj,yj]=pts[j];if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))ins=!ins}return ins}
+function centroid(pts){let x=0,y=0;for(const p of pts){x+=p[0];y+=p[1]}return[x/pts.length,y/pts.length]}
+
+function finishWorld(w){
+  w.trees = new Map(); w.flowers = [];
+  let count = 0;
+  const addTree = (x, y, r) => {const k = Math.floor(x/60)+','+Math.floor(y/60);if(!w.trees.has(k))w.trees.set(k,[]);w.trees.get(k).push({x,y,r,s:Math.floor(R()*4)});count++};
+  for(const a of w.areas){
+    a.bb = bboxOf(a.pts);
+    if(a.kind === 'building' && count < 6000){
+      const [x0,y0,x1,y1] = a.bb, step = 8;
+      let placed = 0;
+      for(let x = x0 + 2; x < x1; x += step) for(let y = y0 + 2; y < y1; y += step){
+        const jx = x + (R()-.5)*3.5, jy = y + (R()-.5)*3.5;
+        if(pip(jx, jy, a.pts)){addTree(jx, jy, 3.2 + R()*2.4); placed++}
+      }
+      if(!placed){const c = centroid(a.pts); addTree(c[0], c[1], 3)}
+    }
+    if(a.kind === 'park'){
+      const [x0,y0,x1,y1] = a.bb, n = Math.min(60, ((x1-x0)*(y1-y0))/120);
+      for(let i=0;i<n;i++){const x=x0+R()*(x1-x0),y=y0+R()*(y1-y0);if(pip(x,y,a.pts)){if(R()<.18)addTree(x,y,3+R()*2.5);else w.flowers.push({x,y,c:pick(['#f3d36b','#f28fb3','#ffffff','#b9a6ff'])})}}
+    }
+  }
+  for(const l of w.lines) l.bb = bboxOf(l.pts);
+  return w;
+}
+
+function genDemoWorld(){
+  rng = mulberry32(777);
+  const size = 520, w = {lines:[], areas:[], landmarkSpots:[], spawn:[0,0]};
+  const xs = [], ys = [];
+  for(let x = -size; x <= size; x += 95 + Math.floor(R()*35)) xs.push(x);
+  for(let y = -size; y <= size; y += 95 + Math.floor(R()*35)) ys.push(y);
+  const riverY = x => 150 + Math.sin(x/170)*60 + Math.sin(x/53)*12;
+  const jit = (i) => (R()-.5)*14;
+  const xj = xs.map(()=>[]), yj = ys.map(()=>[]);
+  xs.forEach((x,i)=>{const pts=[];for(let y=-size;y<=size;y+=65)pts.push([x+jit(i),y]);xj[i]=pts;w.lines.push({kind:'road',w:i%3===1?9:5.5,pts})});
+  ys.forEach((y,i)=>{const pts=[];for(let x=-size;x<=size;x+=65)pts.push([x,y+jit(i)]);yj[i]=pts;w.lines.push({kind:'road',w:i%3===1?9:5.5,pts})});
+  const river=[];for(let x=-size-20;x<=size+20;x+=20)river.push([x,riverY(x)]);
+  w.lines.push({kind:'river',w:26,pts:river});
+  for(let i=0;i<xs.length-1;i++) for(let j=0;j<ys.length-1;j++){
+    const x0=xs[i]+9,x1=xs[i+1]-9,y0=ys[j]+9,y1=ys[j+1]-9, cx=(x0+x1)/2, cy=(y0+y1)/2;
+    const nearRiver = Math.abs(cy - riverY(cx)) < (y1-y0)/2 + 18;
+    if(nearRiver || R() < .17){
+      w.areas.push({kind:'park',pts:[[x0,y0],[x1,y0],[x1,y1],[x0,y1]]});
+      if(!nearRiver) w.landmarkSpots.push([cx,cy]);
+      continue;
+    }
+    const lotsX = 1 + Math.floor(R()*2), lotsY = 1 + Math.floor(R()*2);
+    const dx=(x1-x0)/lotsX, dy=(y1-y0)/lotsY;
+    for(let a=0;a<lotsX;a++)for(let b=0;b<lotsY;b++){
+      const lx=x0+a*dx+2.5, ly=y0+b*dy+2.5, rx=x0+(a+1)*dx-2.5, ry=y0+(b+1)*dy-2.5;
+      w.areas.push({kind:'building',pts:[[lx,ly],[rx,ly],[rx,ry],[lx,ry]]});
+    }
+  }
+  // intersections as extra landmark spots
+  for(let k=0;k<10;k++){const i=1+Math.floor(R()*(xs.length-2)),j=1+Math.floor(R()*(ys.length-2));w.landmarkSpots.push([xs[i],ys[j]])}
+  w.spawn = [xs[Math.floor(xs.length/2)], ys[Math.floor(ys.length/2)]];
+  rng = mulberry32(Date.now() & 0xffff);
+  return finishWorld(w);
+}
+
+async function genOsmWorld(lat, lon){
+  const r = 450;
+  const q = `[out:json][timeout:25];(way["highway"](around:${r},${lat},${lon});way["building"](around:${r},${lat},${lon});way["leisure"~"park|garden"](around:${r+150},${lat},${lon});way["landuse"~"grass|forest|recreation_ground|meadow|village_green"](around:${r+150},${lat},${lon});way["natural"~"water|wood"](around:${r+150},${lat},${lon});way["waterway"](around:${r+150},${lat},${lon});node["amenity"="fountain"](around:${r},${lat},${lon});node["tourism"~"artwork|viewpoint|attraction"](around:${r},${lat},${lon});node["historic"](around:${r},${lat},${lon}););out geom;`;
+  const res = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}});
+  if(!res.ok) throw new Error('map data ' + res.status);
+  const js = await res.json();
+  const k = Math.cos(lat*Math.PI/180)*111320;
+  const P = (la, lo) => [(lo-lon)*k, -(la-lat)*110540];
+  const w = {lines:[], areas:[], landmarkSpots:[], spawn:[0,0], named:[]};
+  let buildings = 0;
+  for(const e of js.elements){
+    const t = e.tags || {};
+    if(e.type === 'node'){ w.landmarkSpots.push(P(e.lat, e.lon)); if(t.name) w.named.push({p:P(e.lat,e.lon), name:t.name}); continue; }
+    if(!e.geometry) continue;
+    const pts = e.geometry.map(g => P(g.lat, g.lon));
+    if(t.highway){
+      const big = /primary|secondary|tertiary|trunk/.test(t.highway), small = /footway|path|cycleway|steps|track|service/.test(t.highway);
+      w.lines.push({kind:'road', w: big ? 10 : small ? 3 : 6, pts});
+    } else if(t.building && buildings < 3000 && pts.length > 2){ w.areas.push({kind:'building', pts}); buildings++; }
+    else if((t.leisure || t.landuse || t.natural === 'wood') && pts.length > 2){
+      w.areas.push({kind:'park', pts});
+      if(t.leisure === 'park'){ const c = centroid(pts); w.landmarkSpots.push(c); if(t.name) w.named.push({p:c, name:t.name}); }
+    }
+    else if(t.natural === 'water' && pts.length > 2) w.areas.push({kind:'water', pts});
+    else if(t.waterway) w.lines.push({kind:'river', w: t.waterway === 'river' ? 22 : 6, pts});
+  }
+  if(w.landmarkSpots.length < 8){
+    const roads = w.lines.filter(l => l.kind === 'road');
+    for(let i = 0; i < 12 && roads.length; i++){ const l = pick(roads); w.landmarkSpots.push(pick(l.pts)); }
+  }
+  return finishWorld(w);
+}
+
+/* ---------- entities ---------- */
+function makeLandmarks(w, realm){
+  const spots = [...w.landmarkSpots].sort(() => Math.random() - .5), out = [], R2 = REALMS[realm];
+  const [sx, sy] = w.spawn;
+  // tutorial landmark close to spawn (Forest), a free welcome spot in other realms
+  out.push({x:sx + 55, y:sy - 35, name: realm === 'forest' ? 'Sprout Shrine' : realm === 'cyber' ? 'Welcome Node' : 'Gatehouse', owner:null, fac:null, ward:0, corrupted:false, tutorial:true});
+  for(const p of spots){
+    if(out.length >= 22) break;
+    if(out.some(l => dist(l.x, l.y, p[0], p[1]) < 70)) continue;
+    const named = realm === 'forest' && (w.named || []).find(n => dist(n.p[0], n.p[1], p[0], p[1]) < 30);
+    const r = Math.random(), fac = r < .3 ? null : pick(FACTIONS).id;
+    out.push({x:p[0], y:p[1], name: named ? named.name : pick(R2.lmA) + ' ' + pick(R2.lmB), owner: fac ? pick(AI_NAMES) : null, fac, ward:0, corrupted:false});
+  }
+  return out;
+}
+function randomPointNear(x, y, r){ const a = Math.random()*Math.PI*2, d = Math.random()*r; return [x + Math.cos(a)*d, y + Math.sin(a)*d]; }
+function makeAgents(){
+  const [sx, sy] = S.world.spawn, out = [];
+  for(let i = 0; i < 16; i++){
+    const [x, y] = randomPointNear(sx, sy, 380);
+    const f = FACTIONS[i % 4];
+    out.push({id:i, name: AI_NAMES[i % AI_NAMES.length], fac: f.id, x, y, tx:x, ty:y, speed: 1.6 + Math.random()*1.6, skill: Math.floor(Math.random()*3), mode: Math.random() < .75 ? 'alert' : 'shield'});
+  }
+  return out;
+}
+function makeEnemy(){
+  const [sx, sy] = [S.player.x, S.player.y], [x, y] = randomPointNear(sx, sy, 300);
+  return {x, y, tx:x, ty:y, hp:1, phase: Math.random()*6, kind: pick(REALMS[S.realm].enemies)};
+}
+
+/* ---------- canvas & camera ---------- */
+const cv = $('#map'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize(){ DPR = Math.min(window.devicePixelRatio || 1, 2.5); W = innerWidth; H = innerHeight; cv.width = W*DPR; cv.height = H*DPR; }
+addEventListener('resize', resize); resize();
+const toScreen = (x, y) => [(x - S.cam.x)*S.cam.zoom + W/2, (y - S.cam.y)*S.cam.zoom + H/2];
+const toWorld = (sx, sy) => [(sx - W/2)/S.cam.zoom + S.cam.x, (sy - H/2)/S.cam.zoom + S.cam.y];
+
+const grass = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#3c5e30'; g.fillRect(0, 0, 128, 128);
+  const r2 = mulberry32(5);
+  for(let i = 0; i < 900; i++){ g.fillStyle = ['#36562b','#44693a','#4a7140','#334f29'][Math.floor(r2()*4)]; g.fillRect(r2()*128, r2()*128, 1 + r2()*3, 1 + r2()*3); }
+  return c;
+})();
+const gridTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d');
+  g.fillStyle = '#0b0d1c'; g.fillRect(0, 0, 64, 64); g.strokeStyle = 'rgba(0,229,255,.13)'; g.lineWidth = 1; g.strokeRect(.5, .5, 64, 64);
+  return c;
+})();
+const fieldTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.fillStyle = '#7d8a45'; g.fillRect(0, 0, 128, 128); const r2 = mulberry32(9);
+  for(let i = 0; i < 600; i++){ g.fillStyle = ['#76833f','#86934c','#8f9a55'][Math.floor(r2()*3)]; g.fillRect(r2()*128, r2()*128, 2, 1); }
+  return c;
+})();
+const THEMES = {
+  forest:  {bg:'#3c5e30', tex:grass, texScale:.3, park:'#5a8f3e', parkEdge:'rgba(30,60,25,.5)', water:'#2c6e8f', riv:['#2a5f3a','#2c6e8f','#3f93b5','rgba(190,240,255,.55)'], roadOut:'#4e3822', roadIn:'#9a774b', roadDot:'#c2a273', floor:'#1f3d22', edge:null, trees:true, flowers:true},
+  cyber:   {bg:'#0b0d1c', tex:gridTex, texScale:.4, park:'#0f2a2c', parkEdge:'#1de9b6', water:'#3a0f4a', riv:['#05060f','#4a1060','#8a2be2','rgba(255,122,217,.7)'], roadOut:'#05060f', roadIn:'#1a1d3a', roadDot:'#00e5ff', floor:'#141838', edge:'#ff2bd6', trees:false, flowers:false},
+  kingdom: {bg:'#7d8a45', tex:fieldTex, texScale:.3, park:'#8fae55', parkEdge:'rgba(60,80,30,.6)', water:'#3d6fa8', riv:['#5b6b3a','#3d6fa8','#5b8fc8','rgba(230,245,255,.6)'], roadOut:'#5e574b', roadIn:'#a69d8c', roadDot:'#d2cab8', floor:'#9a6b46', edge:'#4a3522', trees:false, flowers:true}
+};
+const pats = {};
+
+/* ---------- rendering ---------- */
+const CANOPY = ['#2e6b34','#285f2e','#357a3b','#22532a'];
+function trace(pts, close){ ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for(let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); if(close) ctx.closePath(); }
+function inView(bb, v, pad){ return !(bb[2] < v[0]-pad || bb[0] > v[2]+pad || bb[3] < v[1]-pad || bb[1] > v[3]+pad); }
+
+function render(){
+  const z = S.cam.zoom, w = S.world, T = THEMES[S.realm];
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+  if(!w) return;
+  const [vx0, vy0] = toWorld(0, 0), [vx1, vy1] = toWorld(W, H), v = [vx0, vy0, vx1, vy1];
+  ctx.setTransform(z*DPR, 0, 0, z*DPR, (W/2 - S.cam.x*z)*DPR, (H/2 - S.cam.y*z)*DPR);
+  if(!pats[S.realm]){ pats[S.realm] = ctx.createPattern(T.tex, 'repeat'); pats[S.realm].setTransform(new DOMMatrix().scale(T.texScale)); }
+  ctx.fillStyle = pats[S.realm]; ctx.fillRect(vx0, vy0, vx1 - vx0, vy1 - vy0);
+  // glades
+  for(const a of w.areas) if(a.kind === 'park' && inView(a.bb, v, 10)){ trace(a.pts, true); ctx.fillStyle = T.park; ctx.fill(); ctx.strokeStyle = T.parkEdge; ctx.lineWidth = 1.5; ctx.stroke(); }
+  if(T.flowers) for(const f of w.flowers) if(f.x > vx0 && f.x < vx1 && f.y > vy0 && f.y < vy1){ ctx.fillStyle = f.c; ctx.fillRect(f.x, f.y, 1.1, 1.1); }
+  // water
+  for(const a of w.areas) if(a.kind === 'water' && inView(a.bb, v, 10)){ trace(a.pts, true); ctx.fillStyle = T.water; ctx.fill(); }
+  for(const l of w.lines) if(l.kind === 'river' && inView(l.bb, v, 30)){
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    trace(l.pts); ctx.strokeStyle = T.riv[0]; ctx.lineWidth = l.w + 6; ctx.stroke();
+    ctx.strokeStyle = T.riv[1]; ctx.lineWidth = l.w; ctx.stroke();
+    ctx.strokeStyle = T.riv[2]; ctx.lineWidth = l.w*.55; ctx.stroke();
+    ctx.setLineDash([3, 9]); ctx.lineDashOffset = -S.t*6; ctx.strokeStyle = T.riv[3]; ctx.lineWidth = .8; ctx.stroke(); ctx.setLineDash([]);
+  }
+  // paths
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const roads = w.lines.filter(l => l.kind === 'road' && inView(l.bb, v, 15));
+  for(const l of roads){ trace(l.pts); ctx.strokeStyle = T.roadOut; ctx.lineWidth = l.w + 2.2; ctx.stroke(); }
+  for(const l of roads){ trace(l.pts); ctx.strokeStyle = T.roadIn; ctx.lineWidth = l.w; ctx.stroke(); }
+  if(z > 1.2 || S.realm === 'cyber') for(const l of roads) if(l.w >= 6){ trace(l.pts); ctx.setLineDash(S.realm === 'cyber' ? [6, 5] : [.9, 4.5]); ctx.lineDashOffset = S.realm === 'cyber' ? -S.t*8 : 0; ctx.strokeStyle = T.roadDot; ctx.lineWidth = S.realm === 'cyber' ? .7 : 1.1; ctx.stroke(); ctx.setLineDash([]); }
+  // building footprints: forest floor, neon towers or houses
+  for(const a of w.areas) if(a.kind === 'building' && inView(a.bb, v, 8)){
+    trace(a.pts, true); ctx.fillStyle = T.floor; ctx.fill();
+    if(T.edge){ ctx.strokeStyle = T.edge; ctx.lineWidth = S.realm === 'cyber' ? .9 : 1.2; ctx.stroke(); }
+  }
+  if(!T.trees){
+    if(S.realm === 'cyber' && z > 1.1){ ctx.fillStyle = 'rgba(0,229,255,.55)'; for(const a of w.areas) if(a.kind === 'building' && inView(a.bb, v, 8)){ const c = centroid(a.pts); ctx.fillRect(c[0] - 1, c[1] - 1, 2, 2); } }
+    if(S.realm === 'kingdom' && z > 1.1){ ctx.strokeStyle = 'rgba(70,40,20,.5)'; ctx.lineWidth = .8; for(const a of w.areas) if(a.kind === 'building' && inView(a.bb, v, 8) && a.pts.length === 4){ const [p0, , p2] = a.pts; ctx.beginPath(); ctx.moveTo(p0[0], (p0[1] + p2[1])/2); ctx.lineTo(p2[0], (p0[1] + p2[1])/2); ctx.stroke(); } }
+  }
+  // trees
+  if(T.trees){
+  const gx0 = Math.floor(vx0/60) - 1, gx1 = Math.floor(vx1/60) + 1, gy0 = Math.floor(vy0/60) - 1, gy1 = Math.floor(vy1/60) + 1;
+  const vis = [];
+  for(let gx = gx0; gx <= gx1; gx++) for(let gy = gy0; gy <= gy1; gy++){ const c = w.trees.get(gx + ',' + gy); if(c) vis.push(c); }
+  ctx.fillStyle = 'rgba(8,20,10,.45)';
+  for(const c of vis) for(const t of c){ ctx.beginPath(); ctx.arc(t.x + 1.2, t.y + 1.4, t.r, 0, 6.283); ctx.fill(); }
+  for(const c of vis) for(const t of c){ ctx.fillStyle = CANOPY[t.s]; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, 6.283); ctx.fill(); }
+  if(z > 1.1){ ctx.fillStyle = 'rgba(140,200,110,.22)'; for(const c of vis) for(const t of c){ ctx.beginPath(); ctx.arc(t.x - t.r*.3, t.y - t.r*.35, t.r*.45, 0, 6.283); ctx.fill(); } }
+  }
+
+  // encounter radius
+  const p = S.player;
+  ctx.beginPath(); ctx.arc(p.x, p.y, 40, 0, 6.283);
+  ctx.fillStyle = S.mode === 'alert' && !S.vehicle ? 'rgba(255,190,80,.06)' : 'rgba(90,170,255,.06)'; ctx.fill();
+  ctx.setLineDash([3, 3]); ctx.strokeStyle = S.mode === 'alert' && !S.vehicle ? 'rgba(255,190,80,.5)' : 'rgba(120,180,255,.5)'; ctx.lineWidth = 1/z*1.4; ctx.stroke(); ctx.setLineDash([]);
+  // walk target
+  if(p.tx != null){ ctx.beginPath(); ctx.arc(p.tx, p.ty, 3, 0, 6.283); ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1/z*1.5; ctx.stroke(); }
+
+  // screen-space layer
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  for(const l of S.landmarks) drawLandmark(l);
+  for(const e of S.enemies) drawEnemy(e);
+  drawPlayer();
+  const h = new Date().getHours();
+  if(h >= 19 || h < 6){ ctx.fillStyle = 'rgba(10,20,55,.32)'; ctx.fillRect(0, 0, W, H); }
+}
+
+function drawLandmark(l){
+  const [x, y] = toScreen(l.x, l.y);
+  if(x < -60 || x > W + 60 || y < -60 || y > H + 60) return;
+  const z = S.cam.zoom, col = l.corrupted ? '#7a3cff' : l.fac ? FAC(l.fac).color : '#e8e2c8';
+  const rad = Math.max(16, 18*z);
+  const g = ctx.createRadialGradient(x, y, 2, x, y, rad);
+  g.addColorStop(0, hexA(col, .55)); g.addColorStop(1, hexA(col, 0));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rad, 0, 6.283); ctx.fill();
+  const s = clamp(z*5, 7, 13);
+  ctx.fillStyle = '#6d6a60'; ctx.beginPath(); ctx.ellipse(x, y + s*.9, s*1.2, s*.45, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = l.corrupted ? '#2a1640' : '#cfc8b0'; ctx.fillRect(x - s*.45, y - s*1.2, s*.9, s*2.1);
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y - s*1.35, s*.55 + Math.sin(S.t*3)*.6, 0, 6.283); ctx.fill();
+  if(l.owner === S.player.name && !l.corrupted){ ctx.strokeStyle = '#e8c66a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, s*2.1, 0, 6.283); ctx.stroke(); }
+  if(l.ward > 0){ ctx.strokeStyle = 'rgba(140,220,255,.85)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.lineDashOffset = -S.t*10; ctx.beginPath(); ctx.arc(x, y, s*2.7, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); }
+  if(S.raid && S.raid.lm === l){
+    const pr = (S.t*2) % 1;
+    ctx.strokeStyle = `rgba(255,80,80,${1 - pr})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, s*2 + pr*30, 0, 6.283); ctx.stroke();
+    label(x, y - s*3.6, '⚠ Raid in ' + Math.ceil(S.raid.t) + 's', '#ff8a8a', 12, true);
+  }
+  if(z >= 1.1 || l.owner === S.player.name) label(x, y + s*2.2 + 10, l.name + (l.corrupted ? ' (corrupted)' : ''), '#f6efd9', 11, false);
+}
+function label(x, y, text, col, size, bold){
+  ctx.font = `${bold ? 700 : 600} ${size}px Inter, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(8,14,10,.85)'; ctx.strokeText(text, x, y); ctx.fillStyle = col; ctx.fillText(text, x, y);
+}
+function drawEnemy(e){
+  const [x, y] = toScreen(e.x, e.y);
+  if(x < -40 || x > W + 40 || y < -40 || y > H + 40) return;
+  const b = Math.sin(S.t*3 + e.phase)*3, s = clamp(S.cam.zoom*4, 8, 13);
+  const g = ctx.createRadialGradient(x, y + b, 1, x, y + b, s*2.4);
+  g.addColorStop(0, 'rgba(120,40,180,.7)'); g.addColorStop(1, 'rgba(60,0,90,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y + b, s*2.4, 0, 6.283); ctx.fill();
+  ctx.fillStyle = '#1a0b24'; ctx.beginPath(); ctx.moveTo(x - s, y + b + s); ctx.quadraticCurveTo(x - s*1.1, y + b - s*1.3, x, y + b - s*1.3); ctx.quadraticCurveTo(x + s*1.1, y + b - s*1.3, x + s, y + b + s);
+  for(let i = 0; i < 3; i++) ctx.lineTo(x + s - (i + .5)*s*2/3, y + b + s*(i % 2 ? .4 : 1.1));
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#d78bff'; ctx.beginPath(); ctx.arc(x - s*.35, y + b - s*.3, s*.18, 0, 6.283); ctx.arc(x + s*.35, y + b - s*.3, s*.18, 0, 6.283); ctx.fill();
+}
+function drawPlayer(){
+  const p = S.player, [x, y] = toScreen(p.x, p.y), col = FAC(p.fac).color;
+  ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.ellipse(x, y + 9, 9, 3.5, 0, 0, 6.283); ctx.fill();
+  ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, 9, 0, 6.283); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(x + Math.cos(p.dir)*15, y + Math.sin(p.dir)*15); ctx.lineTo(x + Math.cos(p.dir + 2.6)*7, y + Math.sin(p.dir + 2.6)*7); ctx.lineTo(x + Math.cos(p.dir - 2.6)*7, y + Math.sin(p.dir - 2.6)*7); ctx.fill();
+}
+function hexA(hex, a){ const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${n >> 8 & 255},${n & 255},${a})`; }
+
+/* ---------- UI helpers ---------- */
+function toast(msg, kind = ''){
+  const d = document.createElement('div'); d.className = 'toast ' + kind; d.textContent = msg;
+  $('#toasts').appendChild(d); setTimeout(() => d.remove(), 3800);
+  while($('#toasts').children.length > 2) $('#toasts').firstChild.remove();
+}
+function notify(msg, kind){ if(S.vehicle){ S.heldNotices.push([msg, kind]); return; } toast(msg, kind); }
+let overlay = null;
+function sheet(html, onClose){
+  closeSheet();
+  overlay = document.createElement('div'); overlay.className = 'overlay';
+  overlay.innerHTML = `<div class="sheet">${html}</div>`;
+  overlay.addEventListener('pointerdown', e => { if(e.target === overlay){ closeSheet(); onClose && onClose(); } });
+  document.body.appendChild(overlay); S.busy = true;
+  return overlay.querySelector('.sheet');
+}
+function closeSheet(){ if(overlay){ overlay.remove(); overlay = null; } S.busy = $('#duel').style.display === 'flex'; }
+function updateHud(){
+  const p = S.player; if(!p) return;
+  $('#whoName').textContent = p.name; $('#whoDot').style.background = FAC(p.fac).color;
+  $('#coins').textContent = p.coins; $('#rank').textContent = p.rank;
+  const mb = $('#modeBtn');
+  if(S.vehicle){ mb.className = 'shield'; mb.textContent = '🚗 Vehicle'; }
+  else if(S.modeCooldown > 0){ mb.className = 'shield'; mb.textContent = '⏳ ' + Math.ceil(S.modeCooldown) + 's'; }
+  else if(S.mode === 'alert'){ mb.className = 'alert'; mb.textContent = '⚡ Alert'; }
+  else { mb.className = 'shield'; mb.textContent = '🛡️ Shielded'; }
+  store.set('player', {name:p.name, fac:p.fac, coins:p.coins, rank:p.rank, by:p.by, realms:Object.keys(S.realms).filter(k => S.realms[k].unlocked)});
+  $('#realmBtn').textContent = REALMS[S.realm].icon + ' Realm';
+}
+
+/* ---------- signup flow ---------- */
+const scr = $('#screen');
+function fantasyName(){ return pick(NAME_A) + pick(NAME_B) + Math.floor(10 + Math.random()*89); }
+function signupStart(){
+  const saved = store.get('player');
+  scr.innerHTML = `<div class="signup">
+    <div class="logo">RealmDom</div><div class="tag">Your streets. Your realm. Your rivals.</div>
+    <div class="stack">
+      <button class="signin apple" data-a="go"> Sign in with Apple</button>
+      <button class="signin google" data-a="go"><b style="color:#4285f4">G</b> Sign in with Google</button>
+      <button data-a="guest">Play as guest</button>
+      ${saved ? `<button class="primary" data-a="resume">Continue as ${esc(saved.name)}</button>` : ''}
+    </div>
+    <div class="note">Prototype: sign-in buttons skip straight ahead. The real app uses Sign in with Apple and Google one-tap.</div></div>`;
+  scr.onclick = e => {
+    const a = e.target.closest('button')?.dataset.a; if(!a) return;
+    if(a === 'resume'){ S.pending = {...saved}; signupWorld(); }
+    else { S.pending = {}; signupProfile(); }
+  };
+}
+function signupProfile(){
+  const years = []; for(let y = 2026; y >= 1940; y--) years.push(y);
+  scr.innerHTML = `<div class="signup"><div class="logo" style="font-size:28px">Who are you?</div>
+    <label>Player name</label><div style="display:flex;gap:8px"><input id="nm" maxlength="18" value="${fantasyName()}"><button id="rnd" style="flex:none">🎲</button></div>
+    <label>Birth year</label><select id="by"><option value="">Select…</option>${years.map(y => `<option>${y}</option>`).join('')}</select>
+    <div id="err" class="note" style="color:#ff8a8a"></div>
+    <div class="row"><button class="primary" id="nx">Continue</button></div></div>`;
+  $('#rnd').onclick = () => $('#nm').value = fantasyName();
+  $('#nx').onclick = () => {
+    const nm = $('#nm').value.trim().replace(/[^\p{L}\p{N} _-]/gu, ''), by = +$('#by').value;
+    if(nm.length < 3) return $('#err').textContent = 'Name needs at least 3 letters.';
+    if(!by) return $('#err').textContent = 'Please pick your birth year.';
+    if(2026 - by < 13) return $('#err').textContent = 'Sorry, RealmDom is for players aged 13 and over.';
+    S.pending.name = nm; S.pending.by = by; signupFaction();
+  };
+  scr.onclick = null;
+}
+function signupFaction(){
+  let sel = null;
+  scr.innerHTML = `<div class="signup"><div class="logo" style="font-size:28px">Choose your faction</div>
+    <div class="fgrid">${FACTIONS.map(f => `<div class="fcard" data-f="${f.id}"><span style="font-size:24px">${f.icon}</span><b style="color:${f.color}">${f.name}</b><small>${f.motto}</small></div>`).join('')}</div>
+    <div class="row"><button id="sug">Suggest one</button><button class="primary" id="nx" disabled>Continue</button></div></div>`;
+  const choose = id => { sel = id; scr.querySelectorAll('.fcard').forEach(c => c.classList.toggle('sel', c.dataset.f === id)); $('#nx').disabled = false; };
+  scr.querySelectorAll('.fcard').forEach(c => c.onclick = () => choose(c.dataset.f));
+  $('#sug').onclick = () => choose(pick(FACTIONS).id);
+  $('#nx').onclick = () => { S.pending.fac = sel; S.pending.coins = 150; S.pending.rank = 0; signupWorld(); };
+}
+function signupWorld(){
+  scr.innerHTML = `<div class="signup"><div class="logo" style="font-size:28px">Enter the Forest Realm</div>
+    <div class="stack">
+      <button class="primary" id="demo">🌲 Explore the demo village</button>
+      <button id="real">📍 Use my real streets</button>
+    </div>
+    <div id="msg" class="note">Real streets need location access and live map data. Inside Claude these are blocked, so use the demo village here. Real streets work when this page is hosted on its own site.</div></div>`;
+  $('#demo').onclick = () => startGame(genDemoWorld(), 'demo');
+  $('#real').onclick = async () => {
+    const msg = $('#msg');
+    if(!navigator.geolocation){ msg.textContent = 'Location is not available here. Starting the demo village instead…'; return setTimeout(() => startGame(genDemoWorld(), 'demo'), 1400); }
+    msg.textContent = 'Asking for your location…';
+    navigator.geolocation.getCurrentPosition(async pos => {
+      msg.textContent = 'Loading your streets…';
+      try{ const w = await genOsmWorld(pos.coords.latitude, pos.coords.longitude); S.gps = {lat0:pos.coords.latitude, lon0:pos.coords.longitude}; startGame(w, 'osm'); }
+      catch(e){ msg.textContent = 'Could not load map data (' + e.message + '). Starting the demo village…'; setTimeout(() => startGame(genDemoWorld(), 'demo'), 1600); }
+    }, () => { msg.textContent = 'Location was blocked. Starting the demo village…'; setTimeout(() => startGame(genDemoWorld(), 'demo'), 1400); }, {enableHighAccuracy:true, timeout:10000});
+  };
+}
+
+/* ---------- game start ---------- */
+function startGame(world, kind){
+  S.world = world; S.worldKind = kind;
+  const pd = S.pending;
+  S.player = {name:pd.name, fac:pd.fac, by:pd.by, coins:pd.coins ?? 150, rank:pd.rank ?? 0, x:world.spawn[0], y:world.spawn[1], tx:null, ty:null, dir:0, speedSamples:[]};
+  S.cam.x = S.player.x; S.cam.y = S.player.y;
+  S.realm = 'forest';
+  S.realms = {forest:{unlocked:true, landmarks:makeLandmarks(world, 'forest')}, cyber:{unlocked:false, landmarks:null}, kingdom:{unlocked:false, landmarks:null}};
+  for(const k of pd.realms || []) if(S.realms[k]) S.realms[k].unlocked = true;
+  S.landmarks = S.realms.forest.landmarks; S.agents = makeAgents();
+  S.enemies = [makeEnemy(), makeEnemy(), makeEnemy()];
+  S.tapMove = kind === 'demo';
+  scr.style.display = 'none';
+  updateHud();
+  if(kind === 'osm') startGpsWatch();
+  setTimeout(() => sheet(`<h2>Welcome, ${esc(S.player.name)}</h2>
+    <p>You're in the <b>Forest Realm</b>. Roads are forest paths, buildings are woods, parks are glades.</p>
+    <p><b>Your first goal:</b> walk to the glowing <b>Sprout Shrine</b> nearby and claim it. ${kind === 'demo' ? 'Tap the map to walk.' : 'Walk there for real, or turn on tap-to-move in settings.'}</p>
+    <p>⚡ <b>Alert</b>: rivals nearby can challenge you. 🛡️ <b>Shielded</b>: no player can challenge you, but blight raids still come for your landmarks.</p>
+    <div class="row"><button class="primary" id="ok">Let's go</button></div>`).querySelector('#ok').onclick = closeSheet, 300);
+}
+function startGpsWatch(){
+  let last = null;
+  navigator.geolocation.watchPosition(pos => {
+    const {lat0, lon0} = S.gps, k = Math.cos(lat0*Math.PI/180)*111320;
+    const x = (pos.coords.longitude - lon0)*k, y = -(pos.coords.latitude - lat0)*110540;
+    const now = performance.now()/1000;
+    if(last){ const sp = dist(x, y, last.x, last.y)/Math.max(.5, now - last.t); S.player.speedSamples.push([now, pos.coords.speed ?? sp]); }
+    last = {x, y, t:now};
+    if(!S.tapMove){ S.player.tx = x; S.player.ty = y; }
+  }, () => {}, {enableHighAccuracy:true});
+}
+
+/* ---------- input ---------- */
+const ptrs = new Map(); let gesture = null;
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, {x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY});
+  if(ptrs.size === 2){ const [a, b] = [...ptrs.values()]; gesture = {pinch:true, d:dist(a.x, a.y, b.x, b.y), z:S.cam.zoom}; }
+  else gesture = {moved:false};
+});
+cv.addEventListener('pointermove', e => {
+  const p = ptrs.get(e.pointerId); if(!p || !gesture) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+  if(gesture.pinch && ptrs.size === 2){ const [a, b] = [...ptrs.values()]; S.cam.zoom = clamp(gesture.z*dist(a.x, a.y, b.x, b.y)/gesture.d, .6, 4.5); return; }
+  if(!gesture.moved && dist(e.clientX, e.clientY, p.sx, p.sy) > 8) gesture.moved = true;
+  if(gesture.moved){ S.cam.free = true; S.cam.x -= dx/S.cam.zoom; S.cam.y -= dy/S.cam.zoom; $('#recenter').style.display = 'block'; }
+});
+const endPtr = e => {
+  const p = ptrs.get(e.pointerId); ptrs.delete(e.pointerId);
+  if(gesture && !gesture.pinch && !gesture.moved && p && e.type === 'pointerup') handleTap(e.clientX, e.clientY);
+  if(ptrs.size === 0) gesture = null;
+};
+cv.addEventListener('pointerup', endPtr); cv.addEventListener('pointercancel', endPtr);
+cv.addEventListener('wheel', e => { S.cam.zoom = clamp(S.cam.zoom*(e.deltaY < 0 ? 1.12 : .89), .6, 4.5); e.preventDefault(); }, {passive:false});
+$('#zin').onclick = () => S.cam.zoom = clamp(S.cam.zoom*1.25, .6, 4.5);
+$('#zout').onclick = () => S.cam.zoom = clamp(S.cam.zoom/1.25, .6, 4.5);
+$('#recenter').onclick = () => { S.cam.free = false; $('#recenter').style.display = 'none'; };
+
+function handleTap(sx, sy){
+  if(!S.player || S.busy) return;
+  for(const l of S.landmarks){ const [x, y] = toScreen(l.x, l.y); if(dist(x, y, sx, sy) < 26) return openLandmark(l); }
+  for(const e of S.enemies){ const [x, y] = toScreen(e.x, e.y); if(dist(x, y, sx, sy) < 26) return openEnemy(e); }
+  if(S.tapMove){ const [wx, wy] = toWorld(sx, sy); S.player.tx = wx; S.player.ty = wy; S.cam.free = false; $('#recenter').style.display = 'none'; }
+  else toast('Walk in the real world to move, or turn on tap-to-move in ⚙️.');
+}
+const RANGE = 40;
+const pdist = o => dist(S.player.x, S.player.y, o.x, o.y);
+
+/* ---------- landmarks ---------- */
+function openLandmark(l){
+  const d = Math.round(pdist(l)), near = d <= RANGE, mine = l.owner === S.player.name && !l.corrupted;
+  const fac = l.fac ? FAC(l.fac) : null;
+  const raidHere = S.raid && S.raid.lm === l;
+  let owner = l.corrupted ? '<span style="color:#b98bff">Corrupted by blight</span>' : l.owner ? `<span style="color:${fac.color}">${esc(l.owner)}</span> · ${fac.name}` : 'Unclaimed';
+  let actions = '';
+  if(!near) actions = `<button class="primary" data-a="walk">${S.tapMove ? 'Walk here' : 'Head there'} (${d} m away)</button><p class="center">You must be within ${RANGE} m to act here.</p>`;
+  else if(S.vehicle) actions = `<p>🚗 Vehicle detected. Actions are off until you're on foot.</p>`;
+  else if(mine){
+    actions = raidHere ? `<button class="primary" data-a="defend">⚔️ Defend against the raid</button>` : '';
+    actions += `<button data-a="ward" ${l.ward > 0 ? 'disabled' : ''}>🔷 Place a ward (20 🪙)${l.ward > 0 ? ' · active ' + Math.ceil(l.ward) + 's' : ''}</button>`;
+  }
+  else if(l.corrupted) actions = `<button class="primary" data-a="cleanse">🌿 Cleanse and claim</button>`;
+  else if(!l.owner) actions = `<button class="primary" data-a="claim">✋ Claim this landmark</button>`;
+  else if(l.fac === S.player.fac) actions = `<button data-a="reinforce">🤝 Reinforce for your faction (+5 ⚔️)</button>`;
+  else actions = `<button class="primary" data-a="challenge">⚔️ Challenge for this landmark</button><p class="center">Taking a landmark is a duel against its keeper.</p>`;
+  const sh = sheet(`<h2>${esc(l.name)}</h2>
+    <div class="kv"><span>Keeper</span><span>${owner}</span></div>
+    <div class="kv"><span>Distance</span><span>${d} m</span></div>
+    ${mine ? `<div class="kv"><span>Income</span><span>+1 🪙 / 10 s</span></div>` : ''}
+    ${raidHere ? `<p style="color:#ff8a8a">⚠ Blight spirits strike in ${Math.ceil(S.raid.t)} s. Ward it or defend it in person.</p>` : ''}
+    <div class="stack">${actions}<button data-a="close">Close</button></div>`);
+  sh.onclick = e => {
+    const a = e.target.closest('button')?.dataset.a; if(!a) return;
+    if(a === 'close') return closeSheet();
+    if(a === 'walk'){ closeSheet(); if(S.tapMove){ S.player.tx = l.x; S.player.ty = l.y + 12; S.cam.free = false; } else toast('Head toward ' + l.name + ' — it\'s ' + d + ' m away.'); return; }
+    if(a === 'ward'){ if(S.player.coins < 20) return toast('Not enough coins.', 'bad'); S.player.coins -= 20; l.ward = 120; updateHud(); closeSheet(); return notify('🔷 Ward placed on ' + l.name + ' for 2 minutes.', 'good'); }
+    if(a === 'reinforce'){ closeSheet(); S.player.rank += 5; updateHud(); return notify('🤝 You reinforced ' + l.name + ' for ' + FAC(S.player.fac).name + '.', 'good'); }
+    closeSheet();
+    if(a === 'claim'){
+      startDuel({foe:'Forest guardian', foeFac:null, diff: l.tutorial ? 0 : 1, title:'Claim ' + l.name, stakes:'Win to become keeper of this landmark.',
+        win(){ takeLandmark(l); }, lose(){ notify('The guardian held. Try again!', 'bad'); }});
+    }
+    if(a === 'cleanse'){
+      startDuel({foe:'Blight spirit', foeFac:null, diff:1, title:'Cleanse ' + l.name, stakes:'Win to purge the blight and claim it.', enemy:true,
+        win(){ l.corrupted = false; takeLandmark(l); }, lose(){ notify('The blight resists…', 'bad'); }});
+    }
+    if(a === 'challenge'){
+      startDuel({foe:l.owner, foeFac:l.fac, diff:1 + (Math.random() < .4 ? 1 : 0), title:'Take ' + l.name, stakes:'Win to take the landmark. Lose and you drop 5 ⚔️.',
+        win(){ takeLandmark(l); }, lose(){ S.player.rank = Math.max(0, S.player.rank - 5); updateHud(); }});
+    }
+    if(a === 'defend'){
+      startDuel({foe:'Blight raider', foeFac:null, diff:1, title:'Defend ' + l.name, stakes:'Win to repel the raid. Lose and the raid continues.', enemy:true,
+        win(){ S.raid = null; S.nextRaidIn = 70 + Math.random()*40; S.player.coins += 30; S.player.rank += 8; updateHud(); notify('🛡️ Raid repelled! +30 🪙 +8 ⚔️', 'good'); renderRaidbar(); },
+        lose(){ notify('The raiders pushed through — find another way before the timer ends!', 'bad'); }});
+    }
+  };
+}
+function takeLandmark(l){
+  const first = !S.landmarks.some(x => x.owner === S.player.name);
+  l.owner = S.player.name; l.fac = S.player.fac; l.corrupted = false;
+  S.player.coins += 40; S.player.rank += 10; updateHud();
+  notify(`🏰 ${l.name} is yours! +40 🪙 +10 ⚔️`, 'gold');
+  if(first){ S.nextRaidIn = 45; setTimeout(() => notify('Owned landmarks earn coins, but blight spirits will raid them. Stay watchful.', ''), 1800); }
+}
+
+/* ---------- enemies ---------- */
+function openEnemy(e){
+  const d = Math.round(pdist(e));
+  const sh = sheet(`<h2>${e.kind}</h2><p>A creature of the blight, roaming the realm. Defeat it for coins.</p>
+    <div class="kv"><span>Distance</span><span>${d} m</span></div>
+    <div class="stack">${d <= RANGE && !S.vehicle ? '<button class="primary" data-a="fight">⚔️ Fight (+15 🪙)</button>' : `<p class="center">Get within ${RANGE} m to fight.</p>`}<button data-a="close">Close</button></div>`);
+  sh.onclick = ev => {
+    const a = ev.target.closest('button')?.dataset.a; if(!a) return; closeSheet();
+    if(a === 'fight') startDuel({foe:e.kind, foeFac:null, diff:0, title:'Banish the ' + e.kind.toLowerCase(), stakes:'Win for 15 🪙.', enemy:true,
+      win(){ S.enemies.splice(S.enemies.indexOf(e), 1); S.player.coins += 15; S.player.rank += 3; updateHud(); notify('✨ Banished! +15 🪙 +3 ⚔️', 'good'); setTimeout(() => S.enemies.push(makeEnemy()), 20000); },
+      lose(){ notify('It slipped away into the trees.', 'bad'); }});
+  };
+}
+
+/* ---------- encounters with AI players ---------- */
+function nearestAgent(){
+  let best = null, bd = 1e9;
+  for(const a of S.agents){ const d = pdist(a); if(d < bd && d <= RANGE && !(S.cooldowns.get(a.id) > S.t)){ best = a; bd = d; } }
+  return best;
+}
+function renderBanner(){
+  const b = $('#banner');
+  if(S.vehicle){ b.style.display = 'block'; b.innerHTML = `<div class="card vehicle"><div class="tx"><b>🚗 Vehicle detected</b><br>Encounters are off and alerts are held until you're on foot.</div></div>`; return; }
+  if(S.raid){ b.style.display = 'none'; return; }
+  const a = S.mode === 'alert' && !S.busy ? nearestAgent() : null;
+  if(!a){ b.style.display = 'none'; b.dataset.id = ''; return; }
+  if(b.dataset.id === String(a.id)) return;
+  b.dataset.id = a.id; b.style.display = 'block';
+  const ally = a.fac === S.player.fac, f = FAC(a.fac);
+  b.innerHTML = `<div class="card"><span class="dot" style="background:${f.color}"></span><div class="tx"><b>${ally ? 'An ally' : 'A rival'} is nearby</b><br><span style="color:var(--quiet)">${f.name} · within ${RANGE} m</span></div>
+    <button class="${ally ? '' : 'primary'}" id="encBtn">${ally ? '🤝 Team up' : '⚔️ Duel'}</button></div>`;
+  $('#encBtn').onclick = () => {
+    S.cooldowns.set(a.id, S.t + 90); b.dataset.id = ''; b.style.display = 'none';
+    if(ally){ S.player.coins += 10; S.player.rank += 4; updateHud(); notify(`🤝 Teamed up with ${a.name}! +10 🪙 +4 ⚔️`, 'good'); }
+    else if(a.mode === 'shield') notify(`${a.name} is shielded and can't be challenged right now.`);
+    else startDuel({foe:a.name, foeFac:a.fac, diff:a.skill, title:'Street duel', stakes:'Win for 25 🪙 and 10 ⚔️.',
+      win(){ S.player.coins += 25; S.player.rank += 10; updateHud(); notify('🏆 Victory! +25 🪙 +10 ⚔️', 'gold'); },
+      lose(){ S.player.rank = Math.max(0, S.player.rank - 3); updateHud(); }});
+  };
+}
+function incomingChallenge(a){
+  const f = FAC(a.fac); let t = 30;
+  const sh = sheet(`<h2>⚔️ Challenge!</h2><p><b style="color:${f.color}">${esc(a.name)}</b> of ${f.name} is nearby and challenges you to a duel.</p>
+    <div class="kv"><span>Stakes</span><span>25 🪙 · 10 ⚔️</span></div><div class="kv"><span>Respond within</span><span id="cd">30 s</span></div>
+    <div class="row"><button data-a="no">Decline (−3 ⚔️)</button><button class="primary" data-a="yes">Accept</button></div>`, () => decline());
+  const iv = setInterval(() => { t--; const c = sh.querySelector('#cd'); if(c) c.textContent = t + ' s'; if(t <= 0){ clearInterval(iv); closeSheet(); decline(); } }, 1000);
+  function decline(){ clearInterval(iv); S.player.rank = Math.max(0, S.player.rank - 3); updateHud(); notify('You declined. −3 ⚔️', ''); }
+  S.cooldowns.set(a.id, S.t + 120);
+  sh.onclick = e => {
+    const x = e.target.closest('button')?.dataset.a; if(!x) return; clearInterval(iv); closeSheet();
+    if(x === 'no') return decline();
+    startDuel({foe:a.name, foeFac:a.fac, diff:a.skill, title:'Accepted challenge', stakes:'Win for 25 🪙 and 10 ⚔️.',
+      win(){ S.player.coins += 25; S.player.rank += 10; updateHud(); notify('🏆 Victory! +25 🪙 +10 ⚔️', 'gold'); },
+      lose(){ S.player.rank = Math.max(0, S.player.rank - 3); updateHud(); }});
+  };
+}
+
+/* ---------- raids ---------- */
+function renderRaidbar(){
+  const b = $('#raidbar');
+  if(!S.raid || S.vehicle){ b.style.display = 'none'; return; }
+  b.style.display = 'block';
+  const l = S.raid.lm, d = Math.round(pdist(l));
+  b.innerHTML = `<div class="card" style="border-color:#ff6b6b"><div class="tx"><b>⚠ Blight raid on ${esc(l.name)}</b><br><span style="color:var(--quiet)">Strikes in ${Math.ceil(S.raid.t)} s · ${l.ward > 0 ? 'ward active 🔷' : d + ' m away'}</span></div><button id="raidGo">Go</button></div>`;
+  $('#raidGo').onclick = () => { if(S.tapMove){ S.player.tx = l.x; S.player.ty = l.y + 12; } S.cam.free = false; openLandmark(l); };
+}
+function resolveRaid(){
+  const l = S.raid.lm; S.raid = null; S.nextRaidIn = 60 + Math.random()*50;
+  if(l.ward > 0){ S.player.coins += 10; notify(`🔷 Your ward held! ${l.name} is safe. +10 🪙`, 'good'); }
+  else if(l.owner === S.player.name){ l.corrupted = true; l.owner = null; l.fac = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} fell to the blight. Cleanse it to win it back.`, 'bad'); }
+  updateHud(); renderRaidbar();
+}
+
+/* ---------- duel engine ---------- */
+const duel = $('#duel');
+function startDuel(o){
+  S.busy = true; duel.style.display = 'flex';
+  const feat = REALMS[S.realm].featured;
+  const game = Math.random() < .5 ? GAMES.find(g => g.id === feat) : pick(GAMES); o.game = game;
+  const foeCol = o.foeFac ? FAC(o.foeFac).color : (o.enemy ? '#c27bff' : '#e8e2c8');
+  const diffWord = ['Novice','Skilled','Master'][o.diff];
+  duel.innerHTML = `<div class="dhead"><span>${esc(o.title)}</span><span>${diffWord} opponent</span></div>
+    <div class="arena" style="justify-content:center">
+      <div class="center" style="font-size:13px;color:var(--quiet)">You face</div>
+      <div class="big" style="color:${foeCol}">${esc(o.foe)}</div>
+      ${o.foeFac ? `<div class="center" style="color:var(--quiet)">${FAC(o.foeFac).name}</div>` : ''}
+      <div class="card" style="margin:22px 0 8px"><span style="font-size:30px" id="gIcon">${game.icon}</span><div class="tx"><b id="gName">${game.name}</b><br><span style="color:var(--quiet)" id="gDesc">${game.desc}</span></div></div>
+      <p class="center" style="color:var(--quiet);font-size:13px">${esc(o.stakes)}</p>
+      <div class="stack"><button class="primary" id="go">Start duel</button><button id="reroll">🎲 Re-roll game (10 🪙)</button><button id="flee">Walk away</button></div>
+    </div>`;
+  $('#reroll').onclick = () => {
+    if(S.player.coins < 10) return toast('Not enough coins.', 'bad');
+    S.player.coins -= 10; updateHud();
+    let g; do g = pick(GAMES); while(g === o.game); o.game = g;
+    $('#gIcon').textContent = g.icon; $('#gName').textContent = g.name; $('#gDesc').textContent = g.desc;
+    $('#reroll').disabled = true;
+  };
+  $('#flee').onclick = () => endDuel();
+  $('#go').onclick = () => ({quiz:gameQuiz, runes:gameRunes, memory:gameMemory})[o.game.id](o);
+}
+function endDuel(){ duel.style.display = 'none'; duel.innerHTML = ''; S.busy = !!overlay; }
+function duelResult(o, won, detail){
+  duel.innerHTML = `<div class="arena"><div class="big" style="font-size:44px">${won ? 'Victory' : 'Defeat'}</div>
+    <p class="center" style="color:var(--quiet)">${detail}</p><div class="stack" style="margin-top:24px"><button class="primary" id="done">Back to the realm</button></div></div>`;
+  $('#done').onclick = () => { endDuel(); won ? o.win() : o.lose(); };
+}
+function scoreboard(o, a, b){
+  return `<div class="vs"><div class="fighter"><div class="nm" style="color:${FAC(S.player.fac).color}">${esc(S.player.name)}</div><div class="sc" id="sa">${a}</div></div><div class="vsx">vs</div><div class="fighter"><div class="nm">${esc(o.foe)}</div><div class="sc" id="sb">${b}</div></div></div>`;
+}
+function gameQuiz(o){
+  const qs = [...QUIZ].sort(() => Math.random() - .5);
+  let i = 0, me = 0, foe = 0, round = 0;
+  const pAI = [.45, .62, .78][o.diff];
+  function next(){
+    if(duel.style.display !== 'flex') return;
+    round++;
+    if(round > 3 && me !== foe || round > 5){
+      return duelResult(o, me > foe, `You answered ${me}, ${esc(o.foe)} answered ${foe}.${me === foe ? ' Ties go to the defender.' : ''}`);
+    }
+    const [q, opts, ans] = qs[i++]; const order = opts.map((t, k) => ({t, k})).sort(() => Math.random() - .5);
+    duel.innerHTML = `<div class="dhead"><span>${o.game.name} · ${round > 3 ? 'Sudden death' : 'Question ' + round + ' of 3'}</span><span>${esc(o.title)}</span></div>${scoreboard(o, me, foe)}
+      <div class="arena"><div class="timer"><i id="bar"></i></div><div class="qtext">${esc(q)}</div><div class="opts">${order.map(x => `<button class="opt" data-k="${x.k}">${esc(x.t)}</button>`).join('')}</div><div class="ai-note" id="ain"></div></div>`;
+    const aiRight = Math.random() < pAI, aiPick = aiRight ? ans : pick([0, 1, 2, 3].filter(k => k !== ans));
+    const aiAt = 1.5 + Math.random()*5; let t0 = performance.now(), done = false, aiDone = false;
+    const tick = () => {
+      if(done || !$('#bar')) return; const el = (performance.now() - t0)/1000;
+      $('#bar').style.width = Math.max(0, 100 - el/8*100) + '%';
+      if(!aiDone && el > aiAt){ aiDone = true; $('#ain').textContent = `${o.foe} has answered…`; }
+      if(el >= 8) return finish(null); requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    duel.querySelectorAll('.opt').forEach(b => b.onclick = () => finish(+b.dataset.k));
+    function finish(k){
+      if(done || !$('#sa')) return; done = true;
+      duel.querySelectorAll('.opt').forEach(b => { const kk = +b.dataset.k; if(kk === ans) b.classList.add('right'); else if(kk === k) b.classList.add('wrong'); b.disabled = true; });
+      if(k === ans) me++; if(aiRight) foe++;
+      $('#sa').textContent = me; $('#sb').textContent = foe;
+      $('#ain').textContent = `${o.foe} picked “${opts[aiPick]}” ${aiRight ? '✓' : '✗'}`;
+      setTimeout(next, 1700);
+    }
+  }
+  next();
+}
+function gameRunes(o){
+  const total = 8, life = [1250, 1050, 880][o.diff];
+  const foe = clamp(Math.round(3.5 + o.diff*1.3 + Math.random()*1.6), 2, 8);
+  let n = 0, hits = 0;
+  duel.innerHTML = `<div class="dhead"><span>${o.game.name}</span><span>Target to beat: ${foe} of ${total}</span></div>${scoreboard(o, 0, foe)}<div class="arena" id="ar"><div class="center" style="color:var(--quiet)" id="cnt">Get ready…</div></div>`;
+  const ar = $('#ar'); let cur = null, tm = null;
+  const spawn = () => {
+    if(!ar.isConnected) return;
+    if(cur) cur.remove();
+    if(n >= total) return setTimeout(() => duelResult(o, hits >= foe, `You struck ${hits} of ${total} runes. ${esc(o.foe)} struck ${foe}.${hits === foe ? ' A tie goes to the challenger.' : ''}`), 400);
+    n++; $('#cnt').textContent = `Rune ${n} of ${total}`;
+    const r = ar.getBoundingClientRect(); cur = document.createElement('div'); cur.className = 'rune';
+    cur.textContent = pick(['ᚠ','ᚱ','ᛟ','ᛉ','ᚦ','ᛗ']);
+    cur.style.left = (10 + Math.random()*(r.width - 84)) + 'px'; cur.style.top = (40 + Math.random()*(r.height - 120)) + 'px';
+    cur.onpointerdown = () => { hits++; $('#sa').textContent = hits; clearTimeout(tm); cur.remove(); cur = null; setTimeout(spawn, 260 + Math.random()*500); };
+    ar.appendChild(cur);
+    tm = setTimeout(() => { if(cur){ cur.remove(); cur = null; } setTimeout(spawn, 200); }, life);
+  };
+  setTimeout(spawn, 1200);
+}
+function gameMemory(o){
+  const glyph = ['🍃','🔥','💧','🌙'], len = 4 + o.diff;
+  const seq = Array.from({length:len}, () => Math.floor(Math.random()*4));
+  duel.innerHTML = `<div class="dhead"><span>${o.game.name}</span><span>Sequence of ${len}</span></div><div class="arena"><p class="center" id="st" style="color:var(--quiet);margin-bottom:18px">Watch the spirits…</p>
+    <div class="mem">${glyph.map((g, k) => `<button data-k="${k}" disabled>${g}</button>`).join('')}</div></div>`;
+  const btns = [...duel.querySelectorAll('.mem button')];
+  let i = 0;
+  const show = () => {
+    if(!btns[0].isConnected) return;
+    if(i >= seq.length){ btns.forEach(b => b.disabled = false); $('#st').textContent = 'Now repeat it!'; return; }
+    const b = btns[seq[i]]; b.classList.add('lit');
+    setTimeout(() => { b.classList.remove('lit'); i++; setTimeout(show, 220); }, 520 - o.diff*80);
+  };
+  setTimeout(show, 900);
+  let pos = 0;
+  btns.forEach(b => b.onclick = () => {
+    const k = +b.dataset.k; b.classList.add('lit'); setTimeout(() => b.classList.remove('lit'), 160);
+    if(k !== seq[pos]){ btns.forEach(x => x.disabled = true); return setTimeout(() => duelResult(o, false, `The echo broke at step ${pos + 1} of ${len}.`), 500); }
+    pos++; $('#st').textContent = `${pos} of ${len}`;
+    if(pos === len){ btns.forEach(x => x.disabled = true); setTimeout(() => duelResult(o, true, `You repeated all ${len} steps.`), 500); }
+  });
+}
+
+/* ---------- menus ---------- */
+$('#modeBtn').onclick = () => {
+  if(S.vehicle) return toast('Mode is locked while in a vehicle.');
+  if(S.modeCooldown > 0) return;
+  if(S.mode === 'alert'){ S.mode = 'shield'; notify('🛡️ Shielded. No player can challenge you. Blight raids still can.'); }
+  else { S.modeCooldown = 10; notify('Becoming alert in 10 s…'); }
+  updateHud();
+};
+$('#storeBtn').onclick = () => {
+  const packs = [['Pouch', 100, '0.99'], ['Bag', 550, '4.99'], ['Chest', 1200, '9.99'], ['Vault', 6500, '49.99']];
+  const sh = sheet(`<h2>Coin store</h2><p>Spend coins on wards, game re-rolls and cosmetics. Rank and draft order can never be bought.</p>
+    <div class="pack" style="border-color:var(--gold)"><div><b>Starter offer</b><br><small>500 🪙 + Moonlit skin · once</small></div><button class="primary" data-c="500" data-p="1.99">$1.99</button></div>
+    <div class="stack">${packs.map(p => `<div class="pack"><div><b>${p[0]}</b><br><small>${p[1].toLocaleString()} 🪙</small></div><button data-c="${p[1]}" data-p="${p[2]}">$${p[2]}</button></div>`).join('')}</div>
+    <p class="note">Prototype: no real payment is taken. The real app uses Google Play Billing and Apple StoreKit.</p><div class="row"><button data-x="1">Close</button></div>`);
+  sh.onclick = e => {
+    const b = e.target.closest('button'); if(!b) return; if(b.dataset.x) return closeSheet();
+    const c = +b.dataset.c, p = b.dataset.p;
+    const s2 = sheet(`<h2>Confirm purchase</h2><div class="kv"><span>Item</span><span>${c.toLocaleString()} 🪙</span></div><div class="kv"><span>Price</span><span>$${p}</span></div>
+      <p class="note">In the real app this is the Face ID / fingerprint confirmation from the app store. Nothing is charged in this prototype.</p>
+      <div class="row"><button data-a="no">Cancel</button><button class="primary" data-a="yes">Confirm (demo)</button></div>`);
+    s2.onclick = ev => { const a = ev.target.closest('button')?.dataset.a; if(!a) return; closeSheet(); if(a === 'yes'){ S.player.coins += c; updateHud(); toast(`+${c.toLocaleString()} 🪙 added`, 'gold'); } };
+  };
+};
+function makeCode(realm){ const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for(let i = 0; i < 4; i++) s += c[Math.floor(Math.random()*c.length)]; return realm.toUpperCase() + '-' + s; }
+function enterRealm(k){
+  if(k === S.realm) return;
+  if(S.portalCD > 0) return toast(`The portal is recharging (${Math.ceil(S.portalCD)} s).`);
+  const r = S.realms[k]; if(!r.unlocked) return;
+  if(!r.landmarks) r.landmarks = makeLandmarks(S.world, k);
+  S.realm = k; S.landmarks = r.landmarks; S.enemies = [makeEnemy(), makeEnemy(), makeEnemy()];
+  S.portalCD = 30; S.cooldowns.clear();
+  if(S.raid) notify(`The raid on ${S.raid.lm.name} continues in the realm you left.`, 'bad');
+  updateHud(); closeSheet();
+  notify(`${REALMS[k].icon} You stepped through the portal into the ${REALMS[k].name}. ${REALMS[k].blurb}`, 'gold');
+}
+function acceptInvite(inv){
+  S.invites = S.invites.filter(i => i !== inv);
+  S.realms[inv.realm].unlocked = true; S.player.rank += 5; updateHud();
+  notify(`📨 Invitation accepted. ${inv.from} welcomed you to the ${REALMS[inv.realm].name}.`, 'gold');
+  enterRealm(inv.realm);
+}
+$('#realmBtn').onclick = () => {
+  const R0 = REALMS[S.realm];
+  const mine = S.landmarks.filter(l => l.owner === S.player.name && !l.corrupted).length;
+  const counts = FACTIONS.map(f => [f, S.landmarks.filter(l => l.fac === f.id && !l.corrupted).length]);
+  const rows = Object.keys(REALMS).map(k => {
+    const r = REALMS[k], st = S.realms[k], inv = S.invites.find(i => i.realm === k);
+    let act;
+    if(k === S.realm) act = `<small style="color:var(--gold)">You are here</small>`;
+    else if(st.unlocked) act = `<button data-enter="${k}">Enter</button>`;
+    else if(inv) act = `<button class="primary" data-inv="${k}">Accept invite</button>`;
+    else act = `<small style="color:var(--quiet)">🔒 Invite only</small>`;
+    return `<div class="pack" style="margin-top:8px"><div><b>${r.icon} ${r.name}</b><br><small>${inv && !st.unlocked ? `${esc(inv.from)} (${FAC(inv.fac).name}) invited you` : r.blurb}</small></div>${act}</div>`;
+  }).join('');
+  const sh = sheet(`<h2>${R0.icon} ${R0.name}</h2><p>${S.worldKind === 'osm' ? 'Your real streets' : 'Demo village'} · ${S.landmarks.length} landmarks · ${mine} yours</p>
+    ${counts.map(([f, n]) => `<div class="kv"><span><span class="dot" style="display:inline-block;background:${f.color}"></span> ${f.name}</span><span>${n}</span></div>`).join('')}
+    <div class="kv"><span>Echoes nearby (other realms)</span><span>2 ◌</span></div>
+    <h2 style="font-size:17px;margin-top:16px">Realms</h2>
+    <p class="note" style="margin-top:0">A realm opens only through an invitation from someone already inside it.</p>
+    ${rows}
+    <h2 style="font-size:17px;margin-top:16px">Invite a friend</h2>
+    <p class="note" style="margin-top:0">You can invite friends to realms you're already in.</p>
+    <div class="row" style="margin-top:6px"><select id="invRealm">${Object.keys(REALMS).filter(k => S.realms[k].unlocked).map(k => `<option value="${k}">${REALMS[k].name}</option>`).join('')}</select><button id="mkInv" style="flex:none">Create code</button></div>
+    <div id="invOut"></div>
+    <h2 style="font-size:17px;margin-top:16px">Got a code?</h2>
+    <div class="row" style="margin-top:6px"><input id="codeIn" placeholder="e.g. CYBER-7KQ2" maxlength="14" style="text-transform:uppercase"><button id="useCode" style="flex:none">Join</button></div>
+    <div class="row"><button data-x="1">Close</button></div>`);
+  sh.onclick = e => {
+    const b = e.target.closest('button'); if(!b) return;
+    if(b.dataset.x) return closeSheet();
+    if(b.dataset.enter) return enterRealm(b.dataset.enter);
+    if(b.dataset.inv) return acceptInvite(S.invites.find(i => i.realm === b.dataset.inv));
+    if(b.id === 'mkInv'){
+      const code = makeCode($('#invRealm').value);
+      $('#invOut').innerHTML = `<div class="pack" style="margin-top:8px"><div><b style="font-size:20px;letter-spacing:.08em">${code}</b><br><small>Valid 48 h · 1 use · you get 50 🪙 when they join</small></div><button id="cpy">Copy</button></div>`;
+      $('#cpy').onclick = async ev => { ev.stopPropagation(); try{ await navigator.clipboard.writeText(`Join me in RealmDom! Invite code: ${code}`); toast('Invite copied — send it to a friend.', 'good'); }catch(err){ toast('Copy blocked here. Write down the code: ' + code); } };
+    }
+    if(b.id === 'useCode'){
+      const v = $('#codeIn').value.trim().toUpperCase(), m = v.match(/^(FOREST|CYBER|KINGDOM)-[A-Z0-9]{4}$/);
+      if(!m) return toast('That code doesn\'t look right.', 'bad');
+      const k = m[1].toLowerCase();
+      if(S.realms[k].unlocked) return toast(`You're already in the ${REALMS[k].name}.`);
+      acceptInvite({from:'A friend', fac:S.player.fac, realm:k});
+    }
+  };
+};
+$('#setBtn').onclick = () => {
+  const sh = sheet(`<h2>Settings</h2>
+    <div class="toggle"><div>Simulate driving<br><small style="color:var(--quiet)">Test the no-play-in-vehicle rule</small></div><button class="sw ${S.simDriving ? 'on' : ''}" data-t="drive"></button></div>
+    <div class="toggle"><div>Tap to move<br><small style="color:var(--quiet)">For testing without walking</small></div><button class="sw ${S.tapMove ? 'on' : ''}" data-t="tap"></button></div>
+    <p class="note">Prototype limits: other players are simulated by AI and Bluetooth proximity isn't available in a browser, so nearness is checked by map distance. Timers are shortened so you can try everything in a few minutes.</p>
+    <div class="stack"><button class="danger" data-t="reset">Reset and sign out</button><button data-t="close">Close</button></div>`);
+  sh.onclick = e => {
+    const t = e.target.closest('button')?.dataset.t; if(!t) return;
+    if(t === 'close') return closeSheet();
+    if(t === 'reset'){ store.set('player', null); location.reload(); return; }
+    if(t === 'drive'){ S.simDriving = !S.simDriving; e.target.classList.toggle('on', S.simDriving); }
+    if(t === 'tap'){ S.tapMove = !S.tapMove; e.target.classList.toggle('on', S.tapMove); }
+  };
+};
+
+/* ---------- main loop ---------- */
+let last = performance.now(), slow = 0, vehicleExit = 0;
+function update(dt){
+  const p = S.player; if(!p) return;
+  S.t += dt;
+  // movement
+  if(p.tx != null){
+    const d = dist(p.x, p.y, p.tx, p.ty), sp = S.worldKind === 'osm' && !S.tapMove ? Math.max(d*2, 2) : 11;
+    if(d < .8){ p.tx = p.ty = null; }
+    else { const k = Math.min(1, sp*dt/d); p.dir = Math.atan2(p.ty - p.y, p.tx - p.x); p.x += (p.tx - p.x)*k; p.y += (p.ty - p.y)*k; }
+  }
+  if(!S.cam.free){ S.cam.x += (p.x - S.cam.x)*Math.min(1, dt*5); S.cam.y += (p.y - S.cam.y)*Math.min(1, dt*5); }
+  // vehicle detection: simulated toggle, or GPS speed over ~25 km/h
+  const now = performance.now()/1000;
+  p.speedSamples = p.speedSamples.filter(s => now - s[0] < 20);
+  const fast = p.speedSamples.length >= 3 && p.speedSamples.every(s => s[1] > 7);
+  const wasVehicle = S.vehicle;
+  if(S.simDriving || fast){ S.vehicle = true; vehicleExit = 0; }
+  else if(S.vehicle){ vehicleExit += dt; if(vehicleExit > (S.simDriving ? 0 : 8)) S.vehicle = false; }
+  if(S.vehicle !== wasVehicle){
+    updateHud();
+    if(!S.vehicle){ toast('On foot again — the realm is awake.', 'good'); S.heldNotices.splice(0).slice(-3).forEach(([m, k]) => toast(m, k)); }
+    else if(duel.style.display === 'flex'){ endDuel(); toast('Duel paused: vehicle detected. Your stakes are protected.'); }
+  }
+  if(S.modeCooldown > 0){ S.modeCooldown -= dt; if(S.modeCooldown <= 0){ S.mode = 'alert'; notify('⚡ You are alert. Rivals can challenge you.'); } updateHud(); }
+  // agents
+  for(const a of S.agents){
+    if(dist(a.x, a.y, a.tx, a.ty) < 2){ [a.tx, a.ty] = Math.random() < .35 ? randomPointNear(p.x, p.y, 120) : randomPointNear(S.world.spawn[0], S.world.spawn[1], 420); if(Math.random() < .2) a.mode = a.mode === 'alert' ? 'shield' : 'alert'; }
+    const d = dist(a.x, a.y, a.tx, a.ty), k = Math.min(1, a.speed*dt/d); a.x += (a.tx - a.x)*k; a.y += (a.ty - a.y)*k;
+  }
+  for(const e of S.enemies){
+    if(dist(e.x, e.y, e.tx, e.ty) < 2) [e.tx, e.ty] = randomPointNear(e.x, e.y, 80);
+    const d = dist(e.x, e.y, e.tx, e.ty), k = Math.min(1, 1.2*dt/d); e.x += (e.tx - e.x)*k; e.y += (e.ty - e.y)*k;
+  }
+  // wards
+  for(const l of S.landmarks) if(l.ward > 0) l.ward = Math.max(0, l.ward - dt);
+  // income
+  S.incomeT += dt;
+  if(S.incomeT >= 10){ S.incomeT = 0; const n = S.landmarks.filter(l => l.owner === p.name && !l.corrupted).length; if(n){ p.coins += n; updateHud(); } }
+  // AI factions shift the map
+  S.aiT += dt;
+  if(S.aiT > 25){ S.aiT = 0; const cand = S.landmarks.filter(l => l.owner !== p.name && !l.tutorial && pdist(l) > 80); if(cand.length){ const l = pick(cand); const f = pick(FACTIONS); if(l.corrupted && Math.random() < .5){ l.corrupted = false; } l.fac = f.id; l.owner = pick(AI_NAMES); } }
+  // AI challenges
+  if(!S.busy && S.mode === 'alert' && !S.vehicle){
+    S.challengeT -= dt;
+    if(S.challengeT <= 0){ S.challengeT = 25 + Math.random()*20; const a = nearestAgent(); if(a && a.fac !== p.fac && a.mode === 'alert' && Math.random() < .55) incomingChallenge(a); }
+  }
+  // raids
+  const owned = S.landmarks.filter(l => l.owner === p.name && !l.corrupted);
+  if(!S.raid && owned.length){ S.nextRaidIn -= dt; if(S.nextRaidIn <= 0){ S.raid = {lm: pick(owned), t: 60}; notify(`⚠ Blight spirits will raid ${S.raid.lm.name} in 60 s! Ward it or defend it.`, 'bad'); } }
+  if(S.raid){ S.raid.t -= dt; if(S.raid.lm.owner !== p.name){ S.raid = null; } else if(S.raid.t <= 0) resolveRaid(); }
+  // realm portal cooldown and invitations from players already inside other realms
+  if(S.portalCD > 0) S.portalCD -= dt;
+  if(!S.busy && !S.vehicle){
+    S.inviteT -= dt;
+    if(S.inviteT <= 0){
+      S.inviteT = 45;
+      const want = !S.realms.cyber.unlocked ? 'cyber' : (!S.realms.kingdom.unlocked && p.rank >= 40 ? 'kingdom' : null);
+      if(want && !S.invites.some(i => i.realm === want)){
+        const a = pick(S.agents), inv = {from:a.name, fac:a.fac, realm:want};
+        S.invites.push(inv);
+        notify(`📨 ${a.name}, already in the ${REALMS[want].name}, invited you to join. Open ${REALMS[S.realm].icon} Realm to accept.`, 'gold');
+      }
+    }
+  }
+  slow += dt; if(slow > .4){ slow = 0; renderBanner(); renderRaidbar(); }
+}
+function loop(t){ const dt = Math.min(.05, (t - last)/1000); last = t; try{ update(dt); render(); }catch(e){ console.error(e); } requestAnimationFrame(loop); }
+requestAnimationFrame(loop);
+signupStart();
+</script>
+</body>
+</html>
