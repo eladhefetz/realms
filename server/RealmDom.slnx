@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RealmDom.Server/RealmDom.Server.csproj" />
+    <Project Path="src/RealmDom.World/RealmDom.World.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RealmDom.Tests/RealmDom.Tests.csproj" />
+  </Folder>
+</Solution>
