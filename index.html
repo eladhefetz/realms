@@ -31,12 +31,20 @@ button:disabled{opacity:.45}
 .card .tx{flex:1;font-size:13.5px;line-height:1.35}
 .card.vehicle{border-color:var(--bad);background:rgba(60,14,14,.92)}
 #raidbar{position:fixed;left:8px;right:8px;top:54px;z-index:4;display:none}
-#toasts{position:fixed;left:8px;right:64px;bottom:calc(66px + env(safe-area-inset-bottom));z-index:30;display:flex;flex-direction:column;gap:6px;max-width:420px;pointer-events:none}
+#quest{position:fixed;left:8px;right:64px;bottom:calc(64px + env(safe-area-inset-bottom));z-index:5;display:none}
+#quest .card{padding:7px 10px;border-color:var(--gold);gap:8px}
+#quest .card button{padding:7px 10px;font-size:13px;flex:none}
+.rules{margin:10px 0 0;padding:0;list-style:none}
+.rules li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(214,190,128,.12);font-size:14px;line-height:1.4}
+.rules li span:first-child{font-size:20px;flex:none;width:26px;text-align:center}
+#toasts{position:fixed;left:8px;right:64px;bottom:calc(128px + env(safe-area-inset-bottom));z-index:30;display:flex;flex-direction:column;gap:6px;max-width:420px;pointer-events:none}
 .toast{background:var(--panel);border:1px solid var(--edge);border-radius:12px;padding:8px 11px;font-size:12.5px;line-height:1.35;animation:tin .25s ease}
 .toast.good{border-color:var(--good)}.toast.bad{border-color:var(--bad)}.toast.gold{border-color:var(--gold)}
 @keyframes tin{from{opacity:0;transform:translateY(-6px)}}
 #bottom{position:fixed;left:8px;right:8px;bottom:calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;z-index:5;align-items:flex-end}
-#bottom .grow{flex:1}
+#bottom{pointer-events:none}
+#bottom>*{pointer-events:auto}
+#bottom .grow{flex:1;pointer-events:none}
 #bottom button{background:var(--panel);font-size:13px;font-weight:600;padding:10px 12px}
 #zoom{display:flex;flex-direction:column;gap:6px}
 #zoom button{width:44px;height:40px;padding:0;font-size:18px}
@@ -109,9 +117,11 @@ label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
 <div id="banner"></div>
 <div id="raidbar"></div>
 <div id="toasts"></div>
+<div id="quest"></div>
 <div id="bottom">
   <button id="storeBtn">🏹 Store</button>
   <button id="realmBtn">🌲 Realm</button>
+  <button id="helpBtn">📖</button>
   <button id="setBtn">⚙️</button>
   <div class="grow"></div>
   <div id="zoom"><button id="homeBtn" title="Back to my real position" style="display:none">📍</button><button id="recenter" title="Recenter">◎</button><button id="zin">+</button><button id="zout">−</button></div>
@@ -192,10 +202,10 @@ const REALMS = {
   kingdom: {name:'Kingdom Realm', icon:'🏰', featured:'memory', lmA:['Royal','Old','Iron','Golden','Kings','Stone','High','Crown'], lmB:['Keep','Tower','Gate','Bastion','Hall','Bridge','Citadel','Market'], enemies:['Raider band','Young dragon'], blurb:'Castles and cobbled roads. Memory rules here.'}
 };
 const WEAPONS = [
-  {id:'bow',    name:'Hunting Bow',   icon:'🏹', power:12, rate:.40, price:0},
-  {id:'xbow',   name:'Iron Crossbow', icon:'🎯', power:22, rate:.55, price:300},
-  {id:'staff',  name:'Ember Staff',   icon:'🔥', power:35, rate:.50, price:900},
-  {id:'cannon', name:'Storm Cannon',  icon:'⚡', power:60, rate:.80, price:2500}
+  {id:'bow',    name:'Hunting Bow',   icon:'🏹', power:12, rate:.40, price:0,    rank:0},
+  {id:'xbow',   name:'Iron Crossbow', icon:'🎯', power:22, rate:.55, price:300,  rank:20},
+  {id:'staff',  name:'Ember Staff',   icon:'🔥', power:35, rate:.50, price:900,  rank:80},
+  {id:'cannon', name:'Storm Cannon',  icon:'⚡', power:60, rate:.80, price:2500, rank:200}
 ];
 const W_OF = id => WEAPONS.find(w => w.id === id);
 const BOSSES = {forest:'Blight Colossus', cyber:'The Overmind', kingdom:'Ancient Dragon'};
@@ -211,7 +221,8 @@ const S = {
   world: null, worldKind: 'demo', landmarks: [], agents: [], enemies: [], raid: null, nextRaidIn: 50,
   cam: {x:0, y:0, zoom:1.8, free:false}, busy:false, t:0, gps:null, heldNotices:[],
   cooldowns: new Map(), incomeT: 0, aiT: 0, challengeT: 12, 
-  realm: 'forest', realms: {}, invites: [], portalCD: 0, inviteT: 40
+  realm: 'forest', realms: {}, invites: [], portalCD: 0, inviteT: 40,
+  qi: 0, questOff: false, stats: {kills:0, teamups:0, shield:false, wards:0, armory:false, realmOpened:false, fortress:0}
 };
 
 /* ---------- world: projection & building ---------- */
@@ -621,11 +632,14 @@ function startGame(world, kind){
   scr.style.display = 'none';
   updateHud();
   if(kind === 'osm') startGpsWatch();
-  setTimeout(() => sheet(`<h2>Welcome, ${esc(S.player.name)}</h2>
-    <p>You're in the <b>Forest Realm</b>. Roads are forest paths, buildings are woods, parks are glades.</p>
-    <p><b>Your first goal:</b> walk to the glowing <b>Sprout Shrine</b> nearby and claim it. ${kind === 'demo' ? 'Tap the map to walk.' : 'Walk there for real, or tap the map to walk virtually. Your virtual reach starts at 50 m and grows with rank, up to 500 m.'}</p>
-    <p>⚡ <b>Alert</b>: rivals nearby can challenge you. 🛡️ <b>Shielded</b>: no player can challenge you, but blight raids still come for your landmarks.</p>
-    <div class="row"><button class="primary" id="ok">Let's go</button></div>`).querySelector('#ok').onclick = closeSheet, 300);
+  S.qi = store.get('quest') ?? 0; S.questOff = !!store.get('questOff');
+  setTimeout(() => {
+    const sh = sheet(`<h2>Welcome, ${esc(S.player.name)}</h2>
+      <p>You're in the <b>Forest Realm</b>: ${kind === 'demo' ? 'a demo village' : 'your real streets'}, drawn as a forest. Roads are paths, buildings are woods, parks are glades.</p>
+      <p>A short walkthrough at the bottom of the screen will guide you step by step. Tap 📖 any time for the rules.</p>
+      <div class="row"><button data-a="rules">📖 Rules</button><button class="primary" data-a="go">Start walkthrough</button></div>`);
+    sh.onclick = e => { const a = e.target.closest('button')?.dataset.a; if(!a) return; closeSheet(); if(a === 'rules') showRules(); startQuest(); };
+  }, 300);
 }
 function startGpsWatch(){
   let last = null;
@@ -640,6 +654,74 @@ function startGpsWatch(){
     if(S.player.linked){ S.player.tx = x; S.player.ty = y; }
   }, () => {}, {enableHighAccuracy:true});
 }
+
+/* ---------- rules & walkthrough ---------- */
+function showRules(){
+  const virt = S.worldKind === 'osm';
+  sheet(`<h2>How to play</h2><p>Everything you need, in one screen.</p><ul class="rules">
+    <li><span>🗺️</span><div><b>The map is your streets.</b> ${virt ? `Walk for real, or tap to walk virtually inside your <b>reach</b>: 50 m at the start, +1 m per rank point, up to 500 m.` : 'Tap the map to walk (in the real-streets version, tapping walks you virtually within your reach).'}</div></li>
+    <li><span>📍</span><div><b>Act within 40 m.</b> Landmarks, creatures and players must be within 40 m of your character.</div></li>
+    <li><span>⚡</span><div><b>Alert or Shielded.</b> In ⚡ Alert, you and rivals can challenge each other. In 🛡️ Shielded, no player can challenge you. Going back to Alert takes a short wait.</div></li>
+    <li><span>⚔️</span><div><b>Two ways to fight.</b> <b>Duels</b> are quick mini-games (quiz, runes, memory) where skill decides. <b>Battles</b> are shooting fights where <b>force</b> decides: weapon power + 1 per 10 rank + your allies.</div></li>
+    <li><span>🏰</span><div><b>Land.</b> Claim free landmarks, take rivals' landmarks, or win them as a team. Owned land pays coins. Team land is split into shares you can sell or duel for.</div></li>
+    <li><span>⚠️</span><div><b>Raids.</b> Your land gets raided, always with a countdown. Place a ward or defend it in person, or it becomes corrupted and unowned. Raids happen even in Shielded mode.</div></li>
+    <li><span>🤝</span><div><b>Allies.</b> Team up for a bonus, reinforce allied land (blocks rival factions for 3 minutes), and call allies into battles. ☠ Fortresses can only be taken by a team.</div></li>
+    <li><span>📈</span><div><b>Rank (⚔️).</b> Wins add rank. Losing to a player or keeper costs 5; declining a challenge costs 3. Ties go to the defender. Rank unlocks weapons, extends reach and adds force.</div></li>
+    <li><span>🪙</span><div><b>Coins.</b> Earned by playing; spent on wards, re-rolls, summons and weapons you've unlocked. Money never buys rank.</div></li>
+    <li><span>🌀</span><div><b>Realms.</b> Forest is open to everyone. Cyber and Kingdom need an invitation from someone already inside.</div></li>
+    <li><span>🚗</span><div><b>Never while driving.</b> In a vehicle everything pauses until you're on foot.</div></li>
+  </ul><div class="row"><button class="primary" data-x="1">Got it</button></div>`).onclick = e => { if(e.target.closest('button')) closeSheet(); };
+}
+const nearestOf = list => list.slice().sort((a, b) => pdist(a) - pdist(b))[0];
+const QUESTS = [
+  {title:'Claim your first landmark', how:'Tap the glowing <b>Sprout Shrine</b>, walk next to it, and win the duel against its guardian.', done:() => S.landmarks.some(isMine), target:() => S.landmarks.find(l => l.tutorial) },
+  {title:'Hunt a wandering creature', how:'Tap a dark creature on the map and get within 40 m. In the battle, <b>tap the creature to shoot</b> and tap the purple orbs to block them.', done:() => S.stats.kills > 0, target:() => nearestOf(S.enemies) },
+  {title:'Team up with an ally', how:'An ally is heading your way. When <b>"An ally is nearby"</b> appears at the top, tap <b>Team up</b>.', done:() => S.stats.teamups > 0,
+    start(){ const a = S.agents.find(x => x.fac === S.player.fac); if(a){ [a.x, a.y] = randomPointNear(S.player.x, S.player.y, 25); a.tx = S.player.x; a.ty = S.player.y; S.cooldowns.delete(a.id); } } },
+  {title:'Try Shielded mode', how:'Tap <b>⚡ Alert</b> at the top right. In 🛡️ Shielded no player can challenge you. Tap again to go back to Alert.', done:() => S.stats.shield },
+  {title:'Protect your land', how:'Open a landmark you own (gold ring) and <b>place a ward</b> for 20 🪙. A ward stops raids for 2 minutes.', done:() => S.stats.wards > 0, target:() => nearestOf(S.landmarks.filter(isMine)) },
+  {title:'Check your force', how:'Open <b>🏹 Store</b>. The armory shows your force and which weapons your rank unlocks.', done:() => S.stats.armory },
+  {title:'Look at the realms', how:'Open <b>Realm</b> at the bottom. Other realms open by invitation, and you can create invite codes for friends.', done:() => S.stats.realmOpened },
+  {title:'Take a fortress as a team', how:'Find a <b>☠ fortress</b>, get within 40 m and tap Assault. <b>Call allies</b> or summon fighters until your team is strong enough, then win together. The land is shared by the team.', done:() => S.stats.fortress > 0, target:() => nearestOf(S.landmarks.filter(l => l.boss)) }
+];
+function startQuest(){ const q = QUESTS[S.qi]; if(q && q.start) q.start(); renderQuest(); }
+function renderQuest(){
+  const el = $('#quest');
+  if(S.questOff || S.qi >= QUESTS.length || !S.player){ el.style.display = 'none'; return; }
+  const q = QUESTS[S.qi];
+  el.style.display = 'block';
+  el.innerHTML = `<div class="card"><span style="font-size:20px">📜</span><div class="tx" style="min-width:0"><b style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${S.qi + 1}/${QUESTS.length} · ${q.title}</b><span style="color:var(--quiet);font-size:12px">Tap for how</span></div>${q.target ? '<button id="qShow">Show me</button>' : ''}</div>`;
+  el.querySelector('.card').onclick = e => { if(e.target.id === 'qShow') return; questHelp(); };
+  if(q.target) $('#qShow').onclick = () => showTarget(q);
+}
+function showTarget(q){
+  const t = q.target(); if(!t) return toast('Nothing to show right now. Keep exploring.');
+  if(pdist(t) <= RANGE) return toast("You're close enough. Tap it on the map.");
+  walkTo(t.x, t.y + 12);
+}
+function questHelp(){
+  const q = QUESTS[S.qi];
+  const sh = sheet(`<h2>Step ${S.qi + 1}: ${q.title}</h2><p>${q.how}</p><p class="note">Reward: +${S.qi === QUESTS.length - 1 ? 100 : 20} 🪙</p>
+    <div class="stack">${q.target ? '<button class="primary" data-a="show">Show me</button>' : ''}<button data-a="skip">Skip this step</button><button data-a="off">Hide the walkthrough</button><button data-a="close">Close</button></div>`);
+  sh.onclick = e => {
+    const a = e.target.closest('button')?.dataset.a; if(!a) return; closeSheet();
+    if(a === 'show') showTarget(q);
+    if(a === 'skip'){ S.qi++; store.set('quest', S.qi); startQuest(); }
+    if(a === 'off'){ S.questOff = true; store.set('questOff', true); renderQuest(); toast('Walkthrough hidden. Turn it back on in ⚙️.'); }
+  };
+}
+function checkQuest(){
+  if(S.questOff || S.qi >= QUESTS.length) return;
+  if(QUESTS[S.qi].done()){
+    const last = S.qi === QUESTS.length - 1, r = last ? 100 : 20;
+    S.player.coins += r; updateHud();
+    toast(`✅ Step ${S.qi + 1} done: ${QUESTS[S.qi].title}. +${r} 🪙`, 'gold');
+    S.qi++; store.set('quest', S.qi);
+    if(S.qi >= QUESTS.length) setTimeout(() => toast('🎉 Walkthrough complete. The realm is yours to explore.', 'gold'), 1200);
+    startQuest();
+  }
+}
+$('#helpBtn').onclick = () => showRules();
 
 /* ---------- input ---------- */
 const ptrs = new Map(); let gesture = null;
@@ -709,7 +791,7 @@ function openLandmark(l){
   const d = Math.round(pdist(l)), near = d <= RANGE, mine = isMine(l);
   const fac = l.fac ? FAC(l.fac) : null;
   const raidHere = S.raid && S.raid.lm === l;
-  let owner = l.boss ? `<span style="color:#ff8a8a">☠ ${l.boss}</span>` : l.corrupted ? '<span style="color:#b98bff">Corrupted by blight</span>' : l.team ? `<span style="color:${fac.color}">Team of ${l.team.length}</span> · ${fac.name}` : l.owner ? `<span style="color:${fac.color}">${esc(l.owner)}</span> · ${fac.name}` : 'Unclaimed';
+  let owner = l.boss ? `<span style="color:#ff8a8a">☠ ${l.boss}</span>` : l.corrupted ? '<span style="color:#b98bff">Corrupted (unowned)</span>' : l.team ? `<span style="color:${fac.color}">Team of ${l.team.length}</span> · ${fac.name}` : l.owner ? `<span style="color:${fac.color}">${esc(l.owner)}</span> · ${fac.name}` : 'Unclaimed';
   let actions = '', extra = '';
   if(l.team) extra = `<div class="note" style="margin-top:8px">${l.team.map(m => `${m.name === S.player.name ? '<b>You</b>' : esc(m.name)} · ${pct(m.share)}`).join('<br>')}</div>`;
   if(!near) actions = `<button class="primary" data-a="walk">Walk here (${d} m away)</button><p class="center">You must be within ${RANGE} m to act here.</p>`;
@@ -719,14 +801,14 @@ function openLandmark(l){
     actions += `<button data-a="ward" ${l.ward > 0 ? 'disabled' : ''}>🔷 Place a ward (20 🪙)${l.ward > 0 ? ' · active ' + Math.ceil(l.ward) + 's' : ''}</button>`;
     if(l.team && l.team.length > 1){
       actions += `<button data-a="sell">💰 Sell my ${pct(myShare(l))} share to the team (${shareValue(l, myShare(l))} 🪙)</button>`;
-      actions += l.team.filter(m => m.name !== S.player.name).map(m => `<button data-a="fightmate" data-n="${esc(m.name)}">⚔️ Fight ${esc(m.name)} for their ${pct(m.share)}</button>`).join('');
+      actions += l.team.filter(m => m.name !== S.player.name).map(m => `<button data-a="fightmate" data-n="${esc(m.name)}">⚔️ Duel ${esc(m.name)} for ${pct(Math.min(m.share, myShare(l)))}</button>`).join('');
     }
   }
   else if(l.boss) actions = `<button class="primary" data-a="assault">☠ Assault the fortress</button><p class="center">Needs about ${bossArmor()} force. Bring strong weapons and call allies. The winning team shares the land.</p>`;
   else if(l.corrupted) actions = `<button class="primary" data-a="cleanse">🏹 Cleanse and claim</button>`;
   else if(!l.owner) actions = `<button class="primary" data-a="claim">✋ Claim this landmark</button>`;
   else if(l.fac === S.player.fac) actions = `<button data-a="reinforce" ${l.ward > 0 ? 'disabled' : ''}>🤝 Reinforce for your faction${l.ward > 0 ? ' · shielded ' + Math.ceil(l.ward) + 's' : ' (+5 ⚔️)'}</button><p class="center">An ally holds this landmark. Reinforcing shields it from rival factions for 3 minutes.</p>`;
-  else actions = `<button class="primary" data-a="battle">🏹 Battle the keeper (force ${keeperArmor(l)})</button><button data-a="challenge">🎲 Duel the keeper (mini-game)</button>`;
+  else actions = `<button class="primary" data-a="battle">🏹 Battle the keeper (needs ~${keeperArmor(l)} force)</button><button data-a="challenge">🎲 Duel the keeper (mini-game)</button>`;
   const sh = sheet(`<h2>${esc(l.name)}</h2>
     <div class="kv"><span>Keeper</span><span>${owner}</span></div>${extra}
     <div class="kv"><span>Distance</span><span>${d} m</span></div>
@@ -737,33 +819,33 @@ function openLandmark(l){
     const btn = e.target.closest('button'), a = btn?.dataset.a; if(!a) return;
     if(a === 'close') return closeSheet();
     if(a === 'walk'){ closeSheet(); walkTo(l.x, l.y + 12); return; }
-    if(a === 'ward'){ if(S.player.coins < 20) return toast('Not enough coins.', 'bad'); S.player.coins -= 20; l.ward = 120; updateHud(); closeSheet(); return notify('🔷 Ward placed on ' + l.name + ' for 2 minutes.', 'good'); }
+    if(a === 'ward'){ if(S.player.coins < 20) return toast('Not enough coins.', 'bad'); S.player.coins -= 20; l.ward = 120; S.stats.wards++; updateHud(); closeSheet(); return notify('🔷 Ward placed on ' + l.name + ' for 2 minutes.', 'good'); }
     if(a === 'reinforce'){ closeSheet(); if(l.reinforcedAt > S.t - 300) return toast('Already reinforced recently. Try again later.'); l.reinforcedAt = S.t; l.ward = Math.max(l.ward, 180); S.player.rank += 5; updateHud(); return notify('🤝 You reinforced ' + l.name + '. Rival factions can\'t take it for 3 minutes. +5 ⚔️', 'good'); }
     if(a === 'sell') return sellShare(l);
     closeSheet();
     if(a === 'fightmate') return fightTeammate(l, btn.dataset.n, false);
     if(a === 'claim'){
-      startDuel({foe:'Realm guardian', foeFac:null, diff: l.tutorial ? 0 : 1, title:'Claim ' + l.name, stakes:'Win to become keeper of this landmark.',
+      startDuel({foe:'Realm guardian', foeFac:null, diff: l.tutorial ? 0 : 1, title:'Claim ' + l.name, stakes:'Win: the landmark is yours · Lose: nothing, try again · Ties go to the guardian',
         win(){ takeLandmark(l); }, lose(){ notify('The guardian held. Try again!', 'bad'); }});
     }
     if(a === 'cleanse'){
-      startBattle({foe:pick(REALMS[S.realm].enemies), armor:25, title:'Cleanse ' + l.name, stakes:'Defeat it to purge the blight and claim the land.', allies:true,
-        win(team){ l.corrupted = false; takeLandmark(l, team); }, lose(){ notify('The blight resists…', 'bad'); }});
+      startBattle({foe:pick(REALMS[S.realm].enemies), armor:25, title:'Cleanse ' + l.name, stakes:'Win: cleanse it and claim the land · Lose: nothing, try again', allies:true,
+        win(team){ l.corrupted = false; takeLandmark(l, team); }, lose(){ notify('The corruption holds. Try again with more force.', 'bad'); }});
     }
     if(a === 'challenge'){
-      startDuel({foe:l.owner, foeFac:l.fac, diff:1 + (Math.random() < .4 ? 1 : 0), title:'Take ' + l.name, stakes:'Win to take the landmark. Lose and you drop 5 ⚔️.',
+      startDuel({foe:l.owner, foeFac:l.fac, diff:1 + (Math.random() < .4 ? 1 : 0), title:'Take ' + l.name, stakes:'Win: the landmark is yours · Lose: −5 ⚔️ · Ties go to the keeper',
         win(){ takeLandmark(l); }, lose(){ S.player.rank = Math.max(0, S.player.rank - 5); updateHud(); }});
     }
     if(a === 'battle'){
-      startBattle({foe:l.team ? `${l.owner}'s team` : l.owner, foeFac:l.fac, armor:keeperArmor(l), title:'Battle for ' + l.name, stakes:'The winning team shares the land. Lose and you drop 5 ⚔️.', allies:true,
+      startBattle({foe:l.team ? `${l.owner}'s team` : l.owner, foeFac:l.fac, armor:keeperArmor(l), title:'Battle for ' + l.name, stakes:'Win: your team shares the land · Lose: −5 ⚔️', allies:true,
         win(team){ takeLandmark(l, team); }, lose(){ S.player.rank = Math.max(0, S.player.rank - 5); updateHud(); }});
     }
     if(a === 'assault'){
-      startBattle({foe:l.boss, boss:true, armor:bossArmor(), title:'Assault ' + l.name, stakes:'Too strong to beat alone. The winning team shares the fortress (3× income).', allies:true,
-        win(team){ l.boss = null; l.fortress = true; takeLandmark(l, team, 120); }, lose(){ notify(`${l.boss} drove your team back. Bring more force.`, 'bad'); }});
+      startBattle({foe:l.boss, boss:true, armor:bossArmor(), title:'Assault ' + l.name, stakes:'Too strong to beat alone · Win: your team shares the fortress (3× income) · Lose: nothing', allies:true,
+        win(team){ S.stats.fortress++; l.boss = null; l.fortress = true; takeLandmark(l, team, 120); }, lose(){ notify(`${l.boss} drove your team back. Bring more force.`, 'bad'); }});
     }
     if(a === 'defend'){
-      startBattle({foe:'Raiders', armor:30, title:'Defend ' + l.name, stakes:'Defeat the raiders to save your land.', allies:true,
+      startBattle({foe:'Raiders', armor:30, title:'Defend ' + l.name, stakes:'Win: raid stopped, +30 🪙 · Lose: the raid timer keeps running', allies:true,
         win(){ S.raid = null; S.nextRaidIn = 70 + Math.random()*40; S.player.coins += 30; S.player.rank += 8; updateHud(); notify('🛡️ Raid repelled! +30 🪙 +8 ⚔️', 'good'); renderRaidbar(); },
         lose(){ notify('The raiders pushed through — find another way before the timer ends!', 'bad'); }});
     }
@@ -796,10 +878,11 @@ function sellShare(l){
 }
 function fightTeammate(l, name, theyAsked){
   const mate = l.team.find(m => m.name === name); if(!mate) return;
-  const mine = myShare(l);
-  startDuel({foe:name, foeFac:l.fac, diff:1, title:'Team duel for ' + l.name, stakes:`Winner takes the loser's share (you ${pct(mine)}, ${name} ${pct(mate.share)}).`,
-    win(){ const me = l.team.find(m => m.name === S.player.name); me.share += mate.share; l.team = l.team.filter(m => m !== mate); if(l.team.length < 2){ l.team = null; l.owner = S.player.name; } notify(`🏆 You took ${name}'s share of ${l.name}.`, 'gold'); },
-    lose(){ mate.share += mine; l.team = l.team.filter(m => m.name !== S.player.name); l.owner = mate.name; if(l.team.length < 2) l.team = null; notify(`${name} took your share of ${l.name}.`, 'bad'); }});
+  const me0 = l.team.find(m => m.name === S.player.name), stake = Math.min(me0.share, mate.share);
+  const settle = (winner, loser) => { winner.share += stake; loser.share -= stake; l.team = l.team.filter(m => m.share > 0.001); if(l.team.length < 2){ l.owner = l.team[0].name; l.team = null; } else if(!l.team.some(m => m.name === l.owner)) l.owner = l.team[0].name; };
+  startDuel({foe:name, foeFac:l.fac, diff:1, title:'Team duel for ' + l.name, stakes:`Both stake ${pct(stake)} (the smaller share) · Winner takes it`, youDefend:theyAsked,
+    win(){ settle(me0, mate); notify(`🏆 You won ${pct(stake)} of ${l.name} from ${name}.`, 'gold'); },
+    lose(){ settle(mate, me0); notify(`${name} won ${pct(stake)} of ${l.name} from you.`, 'bad'); }});
 }
 
 /* ---------- enemies ---------- */
@@ -812,8 +895,8 @@ function openEnemy(e){
     <div class="stack">${d <= RANGE && !S.vehicle ? '<button class="primary" data-a="fight">🏹 Fight (+15 🪙)</button>' : `<p class="center">Get within ${RANGE} m to fight.</p>`}<button data-a="close">Close</button></div>`);
   sh.onclick = ev => {
     const a = ev.target.closest('button')?.dataset.a; if(!a) return; closeSheet();
-    if(a === 'fight') startBattle({foe:e.kind, armor:e.armor, title:'Hunt the ' + e.kind.toLowerCase(), stakes:'Win for 15 🪙.', allies:false,
-      win(){ S.enemies.splice(S.enemies.indexOf(e), 1); S.player.coins += 15; S.player.rank += 3; updateHud(); notify('✨ Defeated! +15 🪙 +3 ⚔️', 'good'); setTimeout(() => S.enemies.push(makeEnemy()), 20000); },
+    if(a === 'fight') startBattle({foe:e.kind, armor:e.armor, title:'Hunt the ' + e.kind.toLowerCase(), stakes:'Win: +15 🪙 +3 ⚔️ · Lose: nothing', allies:false,
+      win(){ S.stats.kills++; S.enemies.splice(S.enemies.indexOf(e), 1); S.player.coins += 15; S.player.rank += 3; updateHud(); notify('✨ Defeated! +15 🪙 +3 ⚔️', 'good'); setTimeout(() => S.enemies.push(makeEnemy()), 20000); },
       lose(){ notify('It slipped away.', 'bad'); }});
   };
 }
@@ -953,17 +1036,17 @@ function renderBanner(){
     <button class="${ally ? '' : 'primary'}" id="encBtn">${ally ? '🤝 Team up' : '⚔️ Duel'}</button></div>`;
   $('#encBtn').onclick = () => {
     S.cooldowns.set(a.id, S.t + 90); b.dataset.id = ''; b.style.display = 'none';
-    if(ally){ S.player.coins += 10; S.player.rank += 4; updateHud(); notify(`🤝 Teamed up with ${a.name}! +10 🪙 +4 ⚔️`, 'good'); }
+    if(ally){ S.stats.teamups++; S.player.coins += 10; S.player.rank += 4; updateHud(); notify(`🤝 Teamed up with ${a.name}! +10 🪙 +4 ⚔️`, 'good'); }
     else if(a.mode === 'shield') notify(`${a.name} is shielded and can't be challenged right now.`);
-    else startDuel({foe:a.name, foeFac:a.fac, diff:a.skill, title:'Street duel', stakes:'Win for 25 🪙 and 10 ⚔️.',
+    else startDuel({foe:a.name, foeFac:a.fac, diff:a.skill, title:'Street duel', stakes:'Win: +25 🪙 +10 ⚔️ · Lose: −5 ⚔️',
       win(){ S.player.coins += 25; S.player.rank += 10; updateHud(); notify('🏆 Victory! +25 🪙 +10 ⚔️', 'gold'); },
-      lose(){ S.player.rank = Math.max(0, S.player.rank - 3); updateHud(); }});
+      lose(){ S.player.rank = Math.max(0, S.player.rank - 5); updateHud(); }});
   };
 }
 function incomingChallenge(a){
   const f = FAC(a.fac); let t = 30;
   const sh = sheet(`<h2>⚔️ Challenge!</h2><p><b style="color:${f.color}">${esc(a.name)}</b> of ${f.name} is nearby and challenges you to a duel.</p>
-    <div class="kv"><span>Stakes</span><span>25 🪙 · 10 ⚔️</span></div><div class="kv"><span>Respond within</span><span id="cd">30 s</span></div>
+    <div class="kv"><span>Win</span><span>+25 🪙 +10 ⚔️</span></div><div class="kv"><span>Lose</span><span>−5 ⚔️</span></div><div class="kv"><span>Respond within</span><span id="cd">30 s</span></div>
     <div class="row"><button data-a="no">Decline (−3 ⚔️)</button><button class="primary" data-a="yes">Accept</button></div>`, () => decline());
   const iv = setInterval(() => { t--; const c = sh.querySelector('#cd'); if(c) c.textContent = t + ' s'; if(t <= 0){ clearInterval(iv); closeSheet(); decline(); } }, 1000);
   function decline(){ clearInterval(iv); S.player.rank = Math.max(0, S.player.rank - 3); updateHud(); notify('You declined. −3 ⚔️', ''); }
@@ -971,9 +1054,9 @@ function incomingChallenge(a){
   sh.onclick = e => {
     const x = e.target.closest('button')?.dataset.a; if(!x) return; clearInterval(iv); closeSheet();
     if(x === 'no') return decline();
-    startDuel({foe:a.name, foeFac:a.fac, diff:a.skill, title:'Accepted challenge', stakes:'Win for 25 🪙 and 10 ⚔️.',
+    startDuel({foe:a.name, foeFac:a.fac, diff:a.skill, title:'Accepted challenge', stakes:'Win: +25 🪙 +10 ⚔️ · Lose: −5 ⚔️ · Ties go to you (you were challenged)', youDefend:true,
       win(){ S.player.coins += 25; S.player.rank += 10; updateHud(); notify('🏆 Victory! +25 🪙 +10 ⚔️', 'gold'); },
-      lose(){ S.player.rank = Math.max(0, S.player.rank - 3); updateHud(); }});
+      lose(){ S.player.rank = Math.max(0, S.player.rank - 5); updateHud(); }});
   };
 }
 
@@ -983,13 +1066,13 @@ function renderRaidbar(){
   if(!S.raid || S.vehicle){ b.style.display = 'none'; return; }
   b.style.display = 'block';
   const l = S.raid.lm, d = Math.round(pdist(l));
-  b.innerHTML = `<div class="card" style="border-color:#ff6b6b"><div class="tx"><b>⚠ Blight raid on ${esc(l.name)}</b><br><span style="color:var(--quiet)">Strikes in ${Math.ceil(S.raid.t)} s · ${l.ward > 0 ? 'ward active 🔷' : d + ' m away'}</span></div><button id="raidGo">Go</button></div>`;
+  b.innerHTML = `<div class="card" style="border-color:#ff6b6b"><div class="tx"><b>⚠ Raid on ${esc(l.name)}</b><br><span style="color:var(--quiet)">Strikes in ${Math.ceil(S.raid.t)} s · ${l.ward > 0 ? 'ward active 🔷' : d + ' m away'}</span></div><button id="raidGo">Go</button></div>`;
   $('#raidGo').onclick = () => { walkTo(l.x, l.y + 12); openLandmark(l); };
 }
 function resolveRaid(){
   const l = S.raid.lm; S.raid = null; S.nextRaidIn = 60 + Math.random()*50;
   if(l.ward > 0){ S.player.coins += 10; notify(`🔷 Your ward held! ${l.name} is safe. +10 🪙`, 'good'); }
-  else if(isMine(l)){ l.corrupted = true; l.owner = null; l.fac = null; l.team = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} fell to the blight. Cleanse it to win it back.`, 'bad'); }
+  else if(isMine(l)){ l.corrupted = true; l.owner = null; l.fac = null; l.team = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} was overrun and is now corrupted. Cleanse it to win it back. −5 ⚔️`, 'bad'); }
   updateHud(); renderRaidbar();
 }
 
@@ -1037,7 +1120,7 @@ function gameQuiz(o){
     if(duel.style.display !== 'flex') return;
     round++;
     if(round > 3 && me !== foe || round > 5){
-      return duelResult(o, me > foe, `You answered ${me}, ${esc(o.foe)} answered ${foe}.${me === foe ? ' Ties go to the defender.' : ''}`);
+      return duelResult(o, me > foe || (me === foe && !!o.youDefend), `You answered ${me}, ${esc(o.foe)} answered ${foe}.${me === foe ? ' Ties go to the defender' + (o.youDefend ? ' — that\'s you.' : '.') : ''}`);
     }
     const [q, opts, ans] = qs[i++]; const order = opts.map((t, k) => ({t, k})).sort(() => Math.random() - .5);
     duel.innerHTML = `<div class="dhead"><span>${o.game.name} · ${round > 3 ? 'Sudden death' : 'Question ' + round + ' of 3'}</span><span>${esc(o.title)}</span></div>${scoreboard(o, me, foe)}
@@ -1072,7 +1155,7 @@ function gameRunes(o){
   const spawn = () => {
     if(!ar.isConnected) return;
     if(cur) cur.remove();
-    if(n >= total) return setTimeout(() => duelResult(o, hits >= foe, `You struck ${hits} of ${total} runes. ${esc(o.foe)} struck ${foe}.${hits === foe ? ' A tie goes to the challenger.' : ''}`), 400);
+    if(n >= total) return setTimeout(() => duelResult(o, hits > foe || (hits === foe && !!o.youDefend), `You struck ${hits} of ${total} runes. ${esc(o.foe)} struck ${foe}.${hits === foe ? ' Ties go to the defender' + (o.youDefend ? ' — that\'s you.' : '.') : ''}`), 400);
     n++; $('#cnt').textContent = `Rune ${n} of ${total}`;
     const r = ar.getBoundingClientRect(); cur = document.createElement('div'); cur.className = 'rune';
     cur.textContent = pick(['ᚠ','ᚱ','ᛟ','ᛉ','ᚦ','ᛗ']);
@@ -1110,15 +1193,16 @@ function gameMemory(o){
 $('#modeBtn').onclick = () => {
   if(S.vehicle) return toast('Mode is locked while in a vehicle.');
   if(S.modeCooldown > 0) return;
-  if(S.mode === 'alert'){ S.mode = 'shield'; notify('🛡️ Shielded. No player can challenge you. Blight raids still can.'); }
+  if(S.mode === 'alert'){ S.stats.shield = true; S.mode = 'shield'; notify('🛡️ Shielded. No player can challenge you. Raids on your land still happen.'); }
   else { S.modeCooldown = 10; notify('Becoming alert in 10 s…'); }
   updateHud();
 };
 $('#storeBtn').onclick = () => {
+  S.stats.armory = true;
   const packs = [['Pouch', 100, '0.99'], ['Bag', 550, '4.99'], ['Chest', 1200, '9.99'], ['Vault', 6500, '49.99']];
   const armory = WEAPONS.map(w => { const own = S.player.weapons.includes(w.id), eq = S.player.weapon === w.id;
-    return `<div class="pack"><div><b>${w.icon} ${w.name}</b><br><small>Power ${w.power} · ${(1/w.rate).toFixed(1)} shots/s</small></div>${eq ? '<small style="color:var(--gold)">Equipped</small>' : own ? `<button data-eq="${w.id}">Equip</button>` : `<button data-buy="${w.id}">${w.price.toLocaleString()} 🪙</button>`}</div>`; }).join('');
-  const sh = sheet(`<h2>Armory</h2><p>Your force = weapon power + 1 per 10 rank. Strong enemies and fortresses need more force than one player has — bring allies.</p>
+    return `<div class="pack"><div><b>${w.icon} ${w.name}</b><br><small>Power ${w.power} · ${(1/w.rate).toFixed(1)} shots/s · unlocks at rank ${w.rank}</small></div>${eq ? '<small style="color:var(--gold)">Equipped</small>' : own ? `<button data-eq="${w.id}">Equip</button>` : S.player.rank < w.rank ? `<small style="color:var(--quiet)">🔒 Rank ${w.rank}</small>` : `<button data-buy="${w.id}">${w.price.toLocaleString()} 🪙</button>`}</div>`; }).join('');
+  const sh = sheet(`<h2>Armory</h2><p>Force = weapon power + 1 per 10 rank. Weapons unlock as your rank grows; coins only buy what you've unlocked. Fortresses need more force than one player has, so bring allies.</p>
     <div class="stack" style="margin-top:6px">${armory}</div>
     <h2 style="margin-top:18px">Coin store</h2><p>Spend coins on weapons, wards and re-rolls. Rank and draft order can never be bought.</p>
     <div class="pack" style="border-color:var(--gold)"><div><b>Starter offer</b><br><small>500 🪙 + Moonlit skin · once</small></div><button class="primary" data-c="500" data-p="1.99">$1.99</button></div>
@@ -1154,6 +1238,7 @@ function acceptInvite(inv){
   enterRealm(inv.realm);
 }
 $('#realmBtn').onclick = () => {
+  S.stats.realmOpened = true;
   const R0 = REALMS[S.realm];
   const mine = S.landmarks.filter(isMine).length;
   const counts = FACTIONS.map(f => [f, S.landmarks.filter(l => l.fac === f.id && !l.corrupted).length]);
@@ -1201,13 +1286,15 @@ $('#realmBtn').onclick = () => {
 };
 $('#setBtn').onclick = () => {
   const sh = sheet(`<h2>Settings</h2>
+    <div class="toggle"><div>Walkthrough<br><small style="color:var(--quiet)">Step-by-step guide at the bottom</small></div><button class="sw ${S.questOff ? '' : 'on'}" data-t="quest"></button></div>
     <div class="toggle"><div>Simulate driving<br><small style="color:var(--quiet)">Test the no-play-in-vehicle rule</small></div><button class="sw ${S.simDriving ? 'on' : ''}" data-t="drive"></button></div>
     <p class="note">Prototype limits: other players are simulated by AI and Bluetooth proximity isn't available in a browser, so nearness is checked by map distance. Timers are shortened so you can try everything in a few minutes.</p>
     <div class="stack"><button class="danger" data-t="reset">Reset and sign out</button><button data-t="close">Close</button></div>`);
   sh.onclick = e => {
     const t = e.target.closest('button')?.dataset.t; if(!t) return;
     if(t === 'close') return closeSheet();
-    if(t === 'reset'){ store.set('player', null); location.reload(); return; }
+    if(t === 'reset'){ store.set('player', null); store.set('quest', 0); store.set('questOff', false); location.reload(); return; }
+    if(t === 'quest'){ S.questOff = !S.questOff; store.set('questOff', S.questOff); e.target.classList.toggle('on', !S.questOff); renderQuest(); }
     if(t === 'drive'){ S.simDriving = !S.simDriving; e.target.classList.toggle('on', S.simDriving); }
   };
 };
@@ -1277,7 +1364,7 @@ function update(dt){
     if(tl){
       const mate = pick(tl.team.filter(m => m.name !== p.name)); let t = 30;
       const sh = sheet(`<h2>⚔️ Team challenge</h2><p><b>${esc(mate.name)}</b> asks to fight you for your share of <b>${esc(tl.name)}</b>.</p>
-        <div class="kv"><span>Stakes</span><span>winner takes the loser's share</span></div><div class="kv"><span>Respond within</span><span id="cd2">30 s</span></div>
+        <div class="kv"><span>Stakes</span><span>both stake the smaller share</span></div><div class="kv"><span>Respond within</span><span id="cd2">30 s</span></div>
         <div class="row"><button data-a="no">Decline</button><button class="primary" data-a="yes">Accept</button></div>`);
       const iv = setInterval(() => { t--; const c = sh.querySelector('#cd2'); if(c) c.textContent = t + ' s'; if(t <= 0){ clearInterval(iv); closeSheet(); } }, 1000);
       sh.onclick = e => { const a = e.target.closest('button')?.dataset.a; if(!a) return; clearInterval(iv); closeSheet(); if(a === 'yes') fightTeammate(tl, mate.name, true); else notify('You declined. Your share stays yours.'); };
@@ -1301,7 +1388,7 @@ function update(dt){
       }
     }
   }
-  slow += dt; if(slow > .4){ slow = 0; renderBanner(); renderRaidbar(); }
+  slow += dt; if(slow > .4){ slow = 0; renderBanner(); renderRaidbar(); checkQuest(); }
 }
 function loop(t){ const dt = Math.min(.05, (t - last)/1000); last = t; try{ update(dt); render(); }catch(e){ console.error(e); } requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
