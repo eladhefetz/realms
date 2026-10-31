@@ -11,6 +11,7 @@
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;background:#0d1510;color:var(--ink);font-family:Inter,system-ui,sans-serif;font-size:15px;user-select:none;-webkit-user-select:none}
 canvas#map{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+canvas#map3d{position:fixed;inset:0;width:100%;height:100%;display:none}
 .title{font-family:Cinzel,serif;letter-spacing:.04em}
 button{font:inherit;color:var(--ink);background:rgba(232,198,106,.12);border:1px solid var(--edge);border-radius:12px;padding:10px 14px;cursor:pointer}
 button:active{transform:scale(.97)}
@@ -124,7 +125,7 @@ label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
   <button id="helpBtn">📖</button>
   <button id="setBtn">⚙️</button>
   <div class="grow"></div>
-  <div id="zoom"><button id="homeBtn" title="Back to my real position" style="display:none">📍</button><button id="recenter" title="Recenter">◎</button><button id="zin">+</button><button id="zout">−</button></div>
+  <div id="zoom"><button id="viewBtn" title="Switch 2D / 3D" style="font-size:14px;font-weight:700">3D</button><button id="homeBtn" title="Back to my real position" style="display:none">📍</button><button id="recenter" title="Recenter">◎</button><button id="zin">+</button><button id="zout">−</button></div>
 </div>
 <div id="duel"></div>
 <div id="screen"></div>
@@ -208,6 +209,15 @@ const WEAPONS = [
   {id:'cannon', name:'Storm Cannon',  icon:'⚡', power:60, rate:.80, price:2500, rank:200}
 ];
 const W_OF = id => WEAPONS.find(w => w.id === id);
+const STRUCTS = {
+  tower:     {name:'Watchtower', icon:'🗼', cost:150, desc:'Raids on this land are announced 30 s earlier.'},
+  mint:      {name:'Mint',       icon:'💰', cost:200, desc:'+1 🪙 every 10 s from this land (split by share).'},
+  wall:      {name:'Wall',       icon:'🧱', cost:200, desc:'Raiders here need 10 less force to beat; rivals need 10 more to take it.'},
+  barracks:  {name:'Barracks',   icon:'🏕️', cost:300, desc:'2 garrison fighters join you in battles defending this land.'},
+  wardstone: {name:'Ward Stone', icon:'💎', cost:350, desc:'Automatically blocks one raid on this land every 10 minutes.'}
+};
+const has = (l, k) => !!(l.builds && l.builds.includes(k));
+const slotsOf = l => l.fortress ? 5 : 3;
 const BOSSES = {forest:'Blight Colossus', cyber:'The Overmind', kingdom:'Ancient Dragon'};
 const GAMES = [
   {id:'quiz', name:'Riddle Clash', icon:'📜', desc:'3 questions, 8 seconds each'},
@@ -333,7 +343,8 @@ function makeLandmarks(w, realm){
     if(out.some(l => dist(l.x, l.y, p[0], p[1]) < 70)) continue;
     const named = realm === 'forest' && (w.named || []).find(n => dist(n.p[0], n.p[1], p[0], p[1]) < 30);
     const r = Math.random(), fac = r < .3 ? null : pick(FACTIONS).id;
-    out.push({x:p[0], y:p[1], name: named ? named.name : pick(R2.lmA) + ' ' + pick(R2.lmB), owner: fac ? pick(AI_NAMES) : null, fac, ward:0, corrupted:false});
+    const builds = fac ? ['wall', 'tower', 'barracks', 'mint'].filter(() => Math.random() < .22).slice(0, 2) : [];
+    out.push({x:p[0], y:p[1], name: named ? named.name : pick(R2.lmA) + ' ' + pick(R2.lmB), owner: fac ? pick(AI_NAMES) : null, fac, ward:0, corrupted:false, builds});
   }
   // fortresses held by a realm boss; too strong for one player
   const far = out.filter(l => !l.tutorial).sort((a, b) => dist(a.x, a.y, sx, sy) - dist(b.x, b.y, sx, sy));
@@ -360,8 +371,8 @@ const cv = $('#map'), ctx = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1;
 function resize(){ DPR = Math.min(window.devicePixelRatio || 1, 2.5); W = innerWidth; H = innerHeight; cv.width = W*DPR; cv.height = H*DPR; }
 addEventListener('resize', resize); resize();
-const toScreen = (x, y) => [(x - S.cam.x)*S.cam.zoom + W/2, (y - S.cam.y)*S.cam.zoom + H/2];
-const toWorld = (sx, sy) => [(sx - W/2)/S.cam.zoom + S.cam.x, (sy - H/2)/S.cam.zoom + S.cam.y];
+const toScreen = (x, y, h = 8) => S.view3d && G3 ? project3(x, y, h) : [(x - S.cam.x)*S.cam.zoom + W/2, (y - S.cam.y)*S.cam.zoom + H/2];
+const toWorld = (sx, sy) => S.view3d && G3 ? unproject3(sx, sy) : [(sx - W/2)/S.cam.zoom + S.cam.x, (sy - H/2)/S.cam.zoom + S.cam.y];
 
 const grass = (() => {
   const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
@@ -470,6 +481,7 @@ function drawLandmark(l){
   ctx.fillStyle = '#6d6a60'; ctx.beginPath(); ctx.ellipse(x, y + s*.9, s*1.2, s*.45, 0, 0, 6.283); ctx.fill();
   ctx.fillStyle = l.corrupted ? '#2a1640' : '#cfc8b0'; ctx.fillRect(x - s*.45, y - s*1.2, s*.9, s*2.1);
   ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y - s*1.35, s*.55 + Math.sin(S.t*3)*.6, 0, 6.283); ctx.fill();
+  if(l.builds && l.builds.length && z > .9){ ctx.font = `${Math.round(clamp(z*6, 10, 16))}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; l.builds.forEach((k, i) => { const a = -2.2 + i*.9; ctx.fillText(STRUCTS[k].icon, x + Math.cos(a)*s*3.1, y + Math.sin(a)*s*3.1 + s*.6); }); }
   if(isMine(l)){ ctx.strokeStyle = l.team ? '#7be08a' : '#e8c66a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(x, y, s*2.1, 0, 6.283); ctx.stroke(); }
   if(l.ward > 0){ ctx.strokeStyle = 'rgba(140,220,255,.85)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.lineDashOffset = -S.t*10; ctx.beginPath(); ctx.arc(x, y, s*2.7, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); }
   if(S.raid && S.raid.lm === l){
@@ -665,6 +677,7 @@ function showRules(){
     <li><span>⚔️</span><div><b>Two ways to fight.</b> <b>Duels</b> are quick mini-games (quiz, runes, memory) where skill decides. <b>Battles</b> are shooting fights where <b>force</b> decides: weapon power + 1 per 10 rank + your allies.</div></li>
     <li><span>🏰</span><div><b>Land.</b> Claim free landmarks, take rivals' landmarks, or win them as a team. Owned land pays coins. Team land is split into shares you can sell or duel for.</div></li>
     <li><span>⚠️</span><div><b>Raids.</b> Your land gets raided, always with a countdown. Place a ward or defend it in person, or it becomes corrupted and unowned. Raids happen even in Shielded mode.</div></li>
+    <li><span>🔨</span><div><b>Build.</b> On land you own, build up to 3 structures (5 on a fortress): Watchtower, Mint, Wall, Barracks, Ward Stone. They stay with the land: a rival who takes it gets them, a raid that corrupts it destroys them.</div></li>
     <li><span>🤝</span><div><b>Allies.</b> Team up for a bonus, reinforce allied land (blocks rival factions for 3 minutes), and call allies into battles. ☠ Fortresses can only be taken by a team.</div></li>
     <li><span>📈</span><div><b>Rank (⚔️).</b> Wins add rank. Losing to a player or keeper costs 5; declining a challenge costs 3. Ties go to the defender. Rank unlocks weapons, extends reach and adds force.</div></li>
     <li><span>🪙</span><div><b>Coins.</b> Earned by playing; spent on wards, re-rolls, summons and weapons you've unlocked. Money never buys rank.</div></li>
@@ -680,6 +693,7 @@ const QUESTS = [
     start(){ const a = S.agents.find(x => x.fac === S.player.fac); if(a){ [a.x, a.y] = randomPointNear(S.player.x, S.player.y, 25); a.tx = S.player.x; a.ty = S.player.y; S.cooldowns.delete(a.id); } } },
   {title:'Try Shielded mode', how:'Tap <b>⚡ Alert</b> at the top right. In 🛡️ Shielded no player can challenge you. Tap again to go back to Alert.', done:() => S.stats.shield },
   {title:'Protect your land', how:'Open a landmark you own (gold ring) and <b>place a ward</b> for 20 🪙. A ward stops raids for 2 minutes.', done:() => S.stats.wards > 0, target:() => nearestOf(S.landmarks.filter(isMine)) },
+  {title:'Build on your land', how:'Open a landmark you own, tap <b>🔨 Build</b> and build a structure. A <b>Mint</b> pays more coins; a <b>Wall</b> makes raids easier to beat.', done:() => (S.stats.builds || 0) > 0, target:() => nearestOf(S.landmarks.filter(isMine)) },
   {title:'Check your force', how:'Open <b>🏹 Store</b>. The armory shows your force and which weapons your rank unlocks.', done:() => S.stats.armory },
   {title:'Look at the realms', how:'Open <b>Realm</b> at the bottom. Other realms open by invitation, and you can create invite codes for friends.', done:() => S.stats.realmOpened },
   {title:'Take a fortress as a team', how:'Find a <b>☠ fortress</b>, get within 40 m and tap Assault. <b>Call allies</b> or summon fighters until your team is strong enough, then win together. The land is shared by the team.', done:() => S.stats.fortress > 0, target:() => nearestOf(S.landmarks.filter(l => l.boss)) }
@@ -735,6 +749,7 @@ cv.addEventListener('pointermove', e => {
   const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
   if(gesture.pinch && ptrs.size === 2){ const [a, b] = [...ptrs.values()]; S.cam.zoom = clamp(gesture.z*dist(a.x, a.y, b.x, b.y)/gesture.d, .6, 4.5); return; }
   if(!gesture.moved && dist(e.clientX, e.clientY, p.sx, p.sy) > 8) gesture.moved = true;
+  if(gesture.moved && S.view3d && G3){ G3.yaw -= dx*.006; G3.pitch = clamp(G3.pitch + dy*.004, .35, 1.45); return; }
   if(gesture.moved){ S.cam.free = true; S.cam.x -= dx/S.cam.zoom; S.cam.y -= dy/S.cam.zoom; $('#recenter').style.display = 'block'; }
 });
 const endPtr = e => {
@@ -775,7 +790,7 @@ async function reloadMap(x, y){
   const k = Math.cos(g.lat0*Math.PI/180)*111320, lat = g.lat0 - y/110540, lon = g.lon0 + x/k;
   try{
     const w = await genOsmWorld(lat, lon, g.lat0, g.lon0);
-    w.spawn = S.world.spawn; S.world = w; g.center = [x, y];
+    w.spawn = S.world.spawn; S.world = w; g.center = [x, y]; if(G3) G3.dirty = true;
     for(const key of Object.keys(S.realms)){
       const r = S.realms[key]; if(!r.landmarks) continue;
       const extra = makeLandmarks(w, key).filter(l => !l.tutorial && !r.landmarks.some(o => dist(o.x, o.y, l.x, l.y) < 70));
@@ -798,6 +813,7 @@ function openLandmark(l){
   else if(S.vehicle) actions = `<p>🚗 Vehicle detected. Actions are off until you're on foot.</p>`;
   else if(mine){
     actions = raidHere ? `<button class="primary" data-a="defend">🏹 Defend against the raid</button>` : '';
+    actions += `<button data-a="build">🔨 Build (${(l.builds || []).length}/${slotsOf(l)} slots used)</button>`;
     actions += `<button data-a="ward" ${l.ward > 0 ? 'disabled' : ''}>🔷 Place a ward (20 🪙)${l.ward > 0 ? ' · active ' + Math.ceil(l.ward) + 's' : ''}</button>`;
     if(l.team && l.team.length > 1){
       actions += `<button data-a="sell">💰 Sell my ${pct(myShare(l))} share to the team (${shareValue(l, myShare(l))} 🪙)</button>`;
@@ -811,8 +827,9 @@ function openLandmark(l){
   else actions = `<button class="primary" data-a="battle">🏹 Battle the keeper (needs ~${keeperArmor(l)} force)</button><button data-a="challenge">🎲 Duel the keeper (mini-game)</button>`;
   const sh = sheet(`<h2>${esc(l.name)}</h2>
     <div class="kv"><span>Keeper</span><span>${owner}</span></div>${extra}
+    ${l.builds && l.builds.length ? `<div class="kv"><span>Built</span><span>${l.builds.map(k => STRUCTS[k].icon + ' ' + STRUCTS[k].name).join(', ')}</span></div>` : ''}
     <div class="kv"><span>Distance</span><span>${d} m</span></div>
-    ${mine ? `<div class="kv"><span>Your income</span><span>+${(myShare(l)*(l.fortress ? 3 : 1)).toFixed(1)} 🪙 / 10 s</span></div>` : ''}
+    ${mine ? `<div class="kv"><span>Your income</span><span>+${(myShare(l)*((l.fortress ? 3 : 1) + (has(l, 'mint') ? 1 : 0))).toFixed(1)} 🪙 / 10 s</span></div>` : ''}
     ${raidHere ? `<p style="color:#ff8a8a">⚠ Raiders strike in ${Math.ceil(S.raid.t)} s. Ward it or defend it in person.</p>` : ''}
     <div class="stack">${actions}<button data-a="close">Close</button></div>`);
   sh.onclick = e => {
@@ -822,6 +839,7 @@ function openLandmark(l){
     if(a === 'ward'){ if(S.player.coins < 20) return toast('Not enough coins.', 'bad'); S.player.coins -= 20; l.ward = 120; S.stats.wards++; updateHud(); closeSheet(); return notify('🔷 Ward placed on ' + l.name + ' for 2 minutes.', 'good'); }
     if(a === 'reinforce'){ closeSheet(); if(l.reinforcedAt > S.t - 300) return toast('Already reinforced recently. Try again later.'); l.reinforcedAt = S.t; l.ward = Math.max(l.ward, 180); S.player.rank += 5; updateHud(); return notify('🤝 You reinforced ' + l.name + '. Rival factions can\'t take it for 3 minutes. +5 ⚔️', 'good'); }
     if(a === 'sell') return sellShare(l);
+    if(a === 'build') return openBuild(l);
     closeSheet();
     if(a === 'fightmate') return fightTeammate(l, btn.dataset.n, false);
     if(a === 'claim'){
@@ -845,21 +863,44 @@ function openLandmark(l){
         win(team){ S.stats.fortress++; l.boss = null; l.fortress = true; takeLandmark(l, team, 120); }, lose(){ notify(`${l.boss} drove your team back. Bring more force.`, 'bad'); }});
     }
     if(a === 'defend'){
-      startBattle({foe:'Raiders', armor:30, title:'Defend ' + l.name, stakes:'Win: raid stopped, +30 🪙 · Lose: the raid timer keeps running', allies:true,
+      startBattle({foe:'Raiders', armor:30 - (has(l, 'wall') ? 10 : 0), garrison: has(l, 'barracks'), title:'Defend ' + l.name, stakes:'Win: raid stopped, +30 🪙 · Lose: the raid timer keeps running', allies:true,
         win(){ S.raid = null; S.nextRaidIn = 70 + Math.random()*40; S.player.coins += 30; S.player.rank += 8; updateHud(); notify('🛡️ Raid repelled! +30 🪙 +8 ⚔️', 'good'); renderRaidbar(); },
         lose(){ notify('The raiders pushed through — find another way before the timer ends!', 'bad'); }});
     }
   };
 }
-const keeperArmor = l => 18 + (l.name.length % 3)*12 + (l.team ? 15 : 0);
+function openBuild(l){
+  l.builds = l.builds || [];
+  const full = l.builds.length >= slotsOf(l);
+  const rows = Object.entries(STRUCTS).map(([k, st]) => {
+    const built = has(l, k);
+    const btn = built ? '<small style="color:var(--good)">Built ✓</small>' : full ? '<small style="color:var(--quiet)">No free slot</small>' : `<button data-b="${k}" ${S.player.coins < st.cost ? 'disabled' : ''}>${st.cost} 🪙</button>`;
+    return `<div class="pack"><div style="padding-right:8px"><b>${st.icon} ${st.name}</b><br><small>${st.desc}</small></div>${btn}</div>`;
+  }).join('');
+  const sh = sheet(`<h2>Build on ${esc(l.name)}</h2><p>${l.builds.length} of ${slotsOf(l)} slots used. Structures stay with the land: a rival who takes it gets them, and a raid that corrupts it destroys them.${l.team ? ' On team land, structures serve the whole team.' : ''}</p>
+    <div class="stack">${rows}</div><div class="row"><button data-x="1">Done</button></div>`);
+  sh.onclick = e => {
+    const b = e.target.closest('button'); if(!b) return;
+    if(b.dataset.x) return closeSheet();
+    const k = b.dataset.b; if(!k) return;
+    if(pdist(l) > RANGE) return toast(`Get within ${RANGE} m to build.`);
+    const st = STRUCTS[k]; if(S.player.coins < st.cost) return toast('Not enough coins.', 'bad');
+    S.player.coins -= st.cost; l.builds.push(k); S.stats.builds = (S.stats.builds || 0) + 1; updateHud();
+    if(k === 'wardstone') l.wsAt = 0;
+    toast(`${st.icon} ${st.name} built on ${l.name}!`, 'gold'); if(G3) G3.lmDirty = true;
+    openBuild(l);
+  };
+}
+const keeperArmor = l => 18 + (l.name.length % 3)*12 + (l.team ? 15 : 0) + (has(l, 'wall') ? 10 : 0) + (has(l, 'barracks') ? 8 : 0);
 const bossArmor = () => 140;
-const shareValue = (l, share) => Math.round(260*share*(l.fortress ? 3 : 1));
+const shareValue = (l, share) => Math.round(share*(260*(l.fortress ? 3 : 1) + (l.builds || []).reduce((t, k) => t + STRUCTS[k].cost*.5, 0)));
 function takeLandmark(l, team, bonus = 40){
   const first = !S.landmarks.some(isMine);
   team = team && team.length ? team : [{name:S.player.name, fac:S.player.fac}];
   l.owner = S.player.name; l.fac = S.player.fac; l.corrupted = false;
   l.team = team.length > 1 ? team.map(m => ({name:m.name, share:1/team.length})) : null;
   S.player.coins += bonus; S.player.rank += 10; updateHud();
+  if(l.builds && l.builds.length) setTimeout(() => notify(`Its structures are yours now: ${l.builds.map(k => STRUCTS[k].icon + ' ' + STRUCTS[k].name).join(', ')}.`, 'good'), 1500);
   notify(l.team ? `🏰 Your team of ${team.length} took ${l.name}! Your share: ${pct(1/team.length)}. +${bonus} 🪙 +10 ⚔️` : `🏰 ${l.name} is yours! +${bonus} 🪙 +10 ⚔️`, 'gold');
   if(first){ S.nextRaidIn = 45; setTimeout(() => notify('Owned landmarks earn coins, but raiders will come for them. Stay watchful.', ''), 1800); }
 }
@@ -905,6 +946,7 @@ function openEnemy(e){
 function startBattle(o){
   S.busy = true; duel.style.display = 'flex';
   o.allies = o.allies ? [] : null; o.team = [{name:S.player.name, fac:S.player.fac}];
+  if(o.garrison && o.allies) o.allies.push({name:'Garrison', power:20, garrison:true}, {name:'Garrison', power:20, garrison:true});
   const foeCol = o.boss ? '#ff6b6b' : o.foeFac ? FAC(o.foeFac).color : '#c27bff';
   const prep = () => {
     const w = W_OF(S.player.weapon), mine = myForce(), allyF = (o.allies || []).reduce((t, a) => t + a.power, 0), total = mine + allyF;
@@ -949,7 +991,7 @@ function startBattle(o){
 }
 function battleArena(o){
   const w = W_OF(S.player.weapon), allies = o.allies || [];
-  o.team = [{name:S.player.name, fac:S.player.fac}, ...allies.map(a => ({name:a.name, fac:S.player.fac}))];
+  o.team = [{name:S.player.name, fac:S.player.fac}, ...allies.filter(a => !a.garrison).map(a => ({name:a.name, fac:S.player.fac}))];
   const total = myForce() + allies.reduce((t, a) => t + a.power, 0);
   const mult = clamp(Math.pow(total/o.armor, 1.2), .08, 1.6);
   duel.innerHTML = `<div class="dhead"><span>${esc(o.title)}</span><span>${w.icon} ${w.name}</span></div><canvas id="bat" style="flex:1;width:100%;touch-action:none;border-radius:16px;margin-top:10px"></canvas>
@@ -1072,7 +1114,8 @@ function renderRaidbar(){
 function resolveRaid(){
   const l = S.raid.lm; S.raid = null; S.nextRaidIn = 60 + Math.random()*50;
   if(l.ward > 0){ S.player.coins += 10; notify(`🔷 Your ward held! ${l.name} is safe. +10 🪙`, 'good'); }
-  else if(isMine(l)){ l.corrupted = true; l.owner = null; l.fac = null; l.team = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} was overrun and is now corrupted. Cleanse it to win it back. −5 ⚔️`, 'bad'); }
+  else if(has(l, 'wardstone') && !(l.wsAt > S.t)){ l.wsAt = S.t + 600; notify(`💎 Your Ward Stone blocked the raid on ${l.name}. It recharges in 10 minutes.`, 'good'); }
+  else if(isMine(l)){ const lost = (l.builds || []).length; l.builds = []; if(G3) G3.lmDirty = true; if(lost) setTimeout(() => notify(`🔥 ${lost} structure${lost > 1 ? 's were' : ' was'} destroyed in the raid.`, 'bad'), 1500); l.corrupted = true; l.owner = null; l.fac = null; l.team = null; S.player.rank = Math.max(0, S.player.rank - 5); notify(`💀 ${l.name} was overrun and is now corrupted. Cleanse it to win it back. −5 ⚔️`, 'bad'); }
   updateHud(); renderRaidbar();
 }
 
@@ -1221,6 +1264,7 @@ $('#storeBtn').onclick = () => {
 };
 function makeCode(realm){ const c = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for(let i = 0; i < 4; i++) s += c[Math.floor(Math.random()*c.length)]; return realm.toUpperCase() + '-' + s; }
 function enterRealm(k){
+  if(G3) G3.dirty = true;
   if(k === S.realm) return;
   if(S.portalCD > 0) return toast(`The portal is recharging (${Math.ceil(S.portalCD)} s).`);
   const r = S.realms[k]; if(!r.unlocked) return;
@@ -1299,6 +1343,213 @@ $('#setBtn').onclick = () => {
   };
 };
 
+
+/* ---------- 3D view (three.js, loaded on demand) ---------- */
+const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+let T3 = null, G3 = null;
+async function toggle3D(){
+  if(!S.player) return;
+  if(S.view3d){ S.view3d = false; G3.canvas.style.display = 'none'; $('#viewBtn').textContent = '3D'; return; }
+  if(!T3){ toast('Loading 3D view…'); try{ T3 = await import(THREE_URL); }catch(e){ return toast('The 3D view could not load here.', 'bad'); } }
+  try{ if(!G3) init3D(); }catch(e){ console.error(e); return toast('3D is not supported on this device.', 'bad'); }
+  S.view3d = true; G3.dirty = true; G3.canvas.style.display = 'block'; $('#viewBtn').textContent = '2D';
+  S.cam.free = false; $('#recenter').style.display = 'none';
+  toast('3D view: drag to rotate, pinch or +/− to zoom, tap to walk.');
+}
+$('#viewBtn').onclick = toggle3D;
+function init3D(){
+  const THREE = T3, c = document.createElement('canvas'); c.id = 'map3d';
+  document.body.insertBefore(c, cv);
+  const renderer = new THREE.WebGLRenderer({canvas:c, antialias:true, powerPreference:'high-performance'});
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2)); renderer.setSize(W, H, false);
+  const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(50, W/H, 1, 5000);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x445544, 1.1), sun = new THREE.DirectionalLight(0xffffff, 1.4);
+  sun.position.set(-200, 400, 150); scene.add(hemi, sun);
+  const world = new THREE.Group(), dyn = new THREE.Group(); scene.add(world, dyn);
+  G3 = {canvas:c, renderer, scene, camera, hemi, world, dyn, yaw:.5, pitch:.9, dirty:true, lm:new Map(), en:new Map(), ray:new THREE.Raycaster(), v:new THREE.Vector3(), plane:new THREE.Plane(new THREE.Vector3(0, 1, 0), 0),
+    geo:{base:new THREE.CylinderGeometry(3, 3.8, 1.2, 10), pillar:new THREE.BoxGeometry(1.8, 7, 1.8), orb:new THREE.SphereGeometry(1.5, 14, 10), ring:new THREE.TorusGeometry(6, .35, 6, 32), ward:new THREE.TorusGeometry(8.5, .25, 6, 40), en:new THREE.SphereGeometry(2.6, 12, 10), eye:new THREE.SphereGeometry(.45, 8, 6)}};
+  addEventListener('resize', () => { renderer.setSize(W, H, false); camera.aspect = W/H; camera.updateProjectionMatrix(); });
+}
+function disposeGroup(g){ g.traverse(o => { if(o.geometry && !Object.values(G3.geo).includes(o.geometry)) o.geometry.dispose(); if(o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); }); g.clear(); }
+const openPts = pts => (pts.length > 2 && pts[0][0] === pts[pts.length - 1][0] && pts[0][1] === pts[pts.length - 1][1]) ? pts.slice(0, -1) : pts;
+function ribbonGeo(lines, y, widthScale = 1){
+  const THREE = T3, pos = [], idx = [];
+  for(const l of lines){
+    const h = l.w*widthScale/2;
+    for(let i = 0; i < l.pts.length - 1; i++){
+      const [x0, z0] = l.pts[i], [x1, z1] = l.pts[i + 1], len = Math.hypot(x1 - x0, z1 - z0); if(len < .01) continue;
+      const dx = (x1 - x0)/len, dz = (z1 - z0)/len, nx = -dz*h, nz = dx*h, ex = dx*h*.5, ez = dz*h*.5, b = pos.length/3;
+      pos.push(x0 - ex + nx, y, z0 - ez + nz, x0 - ex - nx, y, z0 - ez - nz, x1 + ex + nx, y, z1 + ez + nz, x1 + ex - nx, y, z1 + ez - nz);
+      idx.push(b, b + 2, b + 1, b + 1, b + 2, b + 3);
+    }
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g;
+}
+function flatGeo(areas, y){
+  const THREE = T3, pos = [];
+  for(const a of areas){
+    const pts = openPts(a.pts); if(pts.length < 3) continue;
+    const tris = THREE.ShapeUtils.triangulateShape(pts.map(p => new THREE.Vector2(p[0], p[1])), []);
+    for(const t of tris) for(const k of t) pos.push(pts[k][0], y, pts[k][1]);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g;
+}
+function prismGeo(areas, heightOf, wallCol, roofCol){
+  const THREE = T3, pos = [], col = [], wc = new THREE.Color(wallCol), rc = new THREE.Color(roofCol);
+  areas.forEach((a, n) => {
+    const pts = openPts(a.pts); if(pts.length < 3) return;
+    const h = heightOf(n, a);
+    for(let i = 0; i < pts.length; i++){
+      const [x0, z0] = pts[i], [x1, z1] = pts[(i + 1) % pts.length], shade = .75 + .25*Math.abs(Math.sin(Math.atan2(z1 - z0, x1 - x0)));
+      pos.push(x0, 0, z0, x1, 0, z1, x1, h, z1, x0, 0, z0, x1, h, z1, x0, h, z0);
+      for(let k = 0; k < 6; k++) col.push(wc.r*shade, wc.g*shade, wc.b*shade);
+    }
+    const tris = THREE.ShapeUtils.triangulateShape(pts.map(p => new THREE.Vector2(p[0], p[1])), []);
+    for(const t of tris) for(const k of t){ pos.push(pts[k][0], h, pts[k][1]); col.push(rc.r, rc.g, rc.b); }
+  });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.computeVertexNormals(); return g;
+}
+function outlineGeo(areas, heightOf){
+  const THREE = T3, pos = [];
+  areas.forEach((a, n) => { const pts = openPts(a.pts), h = heightOf(n, a) + .05; for(let i = 0; i < pts.length; i++){ const p = pts[i], q = pts[(i + 1) % pts.length]; pos.push(p[0], h, p[1], q[0], h, q[1]); } });
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); return g;
+}
+const hash01 = n => { const x = Math.sin(n*127.1 + 311.7)*43758.5453; return x - Math.floor(x); };
+function build3D(){
+  const THREE = T3, w = S.world, T = THEMES[S.realm], g = G3.world;
+  disposeGroup(g); disposeGroup(G3.dyn); G3.lm.clear(); G3.en.clear(); G3.player = null;
+  const lam = (c, extra = {}) => new THREE.MeshLambertMaterial({color:c, side:THREE.DoubleSide, ...extra});
+  G3.scene.background = new THREE.Color(T.bg);
+  G3.scene.fog = new THREE.Fog(T.bg, 250, 900);
+  G3.hemi.intensity = S.realm === 'cyber' ? .7 : 1.1;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), lam(T.bg)); ground.rotation.x = -Math.PI/2; g.add(ground);
+  const parks = w.areas.filter(a => a.kind === 'park'), water = w.areas.filter(a => a.kind === 'water'), blds = w.areas.filter(a => a.kind === 'building');
+  g.add(new THREE.Mesh(flatGeo(parks, .05), lam(T.park)));
+  g.add(new THREE.Mesh(flatGeo(water, .07), lam(T.water)));
+  const rivers = w.lines.filter(l => l.kind === 'river'), roads = w.lines.filter(l => l.kind === 'road');
+  g.add(new THREE.Mesh(ribbonGeo(rivers, .08, 1.2), lam(T.riv[0])));
+  g.add(new THREE.Mesh(ribbonGeo(rivers, .09), lam(T.riv[1])));
+  g.add(new THREE.Mesh(ribbonGeo(roads, .1, 1), lam(T.roadOut)));
+  g.add(new THREE.Mesh(ribbonGeo(roads, .12, .8), lam(T.roadIn)));
+  if(S.realm === 'forest'){
+    g.add(new THREE.Mesh(flatGeo(blds, .11), lam(T.floor)));
+    const trees = []; for(const c of w.trees.values()) for(const t of c) if(!S.landmarks.some(l => Math.abs(l.x - t.x) < 18 && Math.abs(l.y - t.y) < 18 && dist(l.x, l.y, t.x, t.y) < 18)) trees.push(t);
+    const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), new THREE.MeshLambertMaterial({flatShading:true}), trees.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), cols = CANOPY.map(c => new THREE.Color(c));
+    trees.forEach((t, i) => { const h = t.r*(1.1 + hash01(i)*.6); p.set(t.x, h, t.y); sc.set(t.r, h, t.r); m.compose(p, q, sc); im.setMatrixAt(i, m); im.setColorAt(i, cols[t.s]); });
+    g.add(im);
+    const trunks = new THREE.InstancedMesh(new THREE.CylinderGeometry(.35, .5, 1, 5), lam('#4a3520'), trees.length);
+    trees.forEach((t, i) => { p.set(t.x, .6, t.y); sc.set(1, 1.2, 1); m.compose(p, q, sc); trunks.setMatrixAt(i, m); });
+    g.add(trunks);
+  } else if(S.realm === 'cyber'){
+    const hOf = n => 12 + hash01(n)*38;
+    g.add(new THREE.Mesh(prismGeo(blds, hOf, '#161a3c', '#242a5e'), new THREE.MeshLambertMaterial({vertexColors:true, side:THREE.DoubleSide})));
+    g.add(new THREE.LineSegments(outlineGeo(blds, hOf), new THREE.LineBasicMaterial({color:'#ff2bd6'})));
+    g.add(new THREE.Mesh(ribbonGeo(roads.filter(l => l.w >= 6), .14, .12), new THREE.MeshBasicMaterial({color:'#00e5ff'})));
+  } else {
+    const hOf = n => 5 + hash01(n)*6;
+    g.add(new THREE.Mesh(prismGeo(blds, hOf, '#d9c9a3', T.floor), new THREE.MeshLambertMaterial({vertexColors:true, side:THREE.DoubleSide})));
+  }
+  // player, rings
+  const pc = FAC(S.player.fac).color, pg = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.6, 4, 12), lam(pc)); body.position.y = 2;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(1.3, 12, 10), lam('#f4e6d0')); head.position.y = 5;
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(.8, 2.2, 8), lam('#ffffff')); nose.rotation.x = Math.PI/2; nose.position.set(0, 2.5, 2.2);
+  pg.add(body, head, nose); G3.dyn.add(pg); G3.player = pg;
+  const ring = (r, col, op) => { const m = new THREE.Mesh(new THREE.RingGeometry(r - .5, r + .5, 96), new THREE.MeshBasicMaterial({color:col, transparent:true, opacity:op, side:THREE.DoubleSide})); m.rotation.x = -Math.PI/2; m.position.y = .3; G3.dyn.add(m); return m; };
+  G3.act = ring(RANGE, '#ffbe50', .7);
+  G3.target = ring(2.5, '#ffffff', .8);
+  G3.reach = ring(1, '#8cc8ff', .85); G3.reachR = 0;
+  const real = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, .6, 20), new THREE.MeshBasicMaterial({color:'#3c8cff'})); G3.dyn.add(real); G3.real = real;
+  G3.dirty = false;
+}
+function buildMeshes(l, r){
+  const THREE = T3;
+  if(r.bg){ r.gr.remove(r.bg); disposeGroup(r.bg); }
+  const bg = new THREE.Group(); r.bg = bg; r.bkey = (l.builds || []).join();
+  (l.builds || []).forEach((k, i) => {
+    const a = -2.2 + i*1.25, x = Math.cos(a)*7.5, z = Math.sin(a)*7.5, g = new THREE.Group(); g.position.set(x, 0, z);
+    const lam = c => new THREE.MeshLambertMaterial({color:c});
+    if(k === 'tower'){ const t = new THREE.Mesh(new THREE.BoxGeometry(1.4, 7, 1.4), lam('#9a8f7a')); t.position.y = 3.5; const roof = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2, 4), lam('#7a3b2a')); roof.position.y = 8; g.add(t, roof); }
+    if(k === 'mint'){ const m = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 2, 12), lam('#e8c66a')); m.position.y = 1; g.add(m); }
+    if(k === 'wall'){ g.position.set(0, 0, 0); const w = new THREE.Mesh(new THREE.TorusGeometry(10.5, .7, 4, 28), lam('#8d8577')); w.rotation.x = Math.PI/2; w.position.y = .7; g.add(w); }
+    if(k === 'barracks'){ const b = new THREE.Mesh(new THREE.BoxGeometry(3, 1.8, 2), lam('#a0784f')); b.position.y = .9; const roof = new THREE.Mesh(new THREE.ConeGeometry(2.2, 1.4, 4), lam('#5c3a22')); roof.rotation.y = Math.PI/4; roof.position.y = 2.5; g.add(b, roof); }
+    if(k === 'wardstone'){ const s2 = new THREE.Mesh(new THREE.OctahedronGeometry(1.3), new THREE.MeshBasicMaterial({color:'#7fe3ff'})); s2.position.y = 3; s2.userData.spin = true; g.add(s2); }
+    bg.add(g);
+  });
+  r.gr.add(bg);
+}
+function lmMesh(l){
+  const THREE = T3, gr = new THREE.Group();
+  const base = new THREE.Mesh(G3.geo.base, new THREE.MeshLambertMaterial({color:'#77736a'})); base.position.y = .6;
+  const pillar = new THREE.Mesh(G3.geo.pillar, new THREE.MeshLambertMaterial({color:'#d8d0b8'})); pillar.position.y = 4.6;
+  const orb = new THREE.Mesh(G3.geo.orb, new THREE.MeshBasicMaterial({color:'#ffffff'})); orb.position.y = 9.3;
+  const glow = new THREE.Mesh(G3.geo.orb, new THREE.MeshBasicMaterial({color:'#ffffff', transparent:true, opacity:.25})); glow.position.y = 9.3; glow.scale.setScalar(2.4);
+  const own = new THREE.Mesh(G3.geo.ring, new THREE.MeshBasicMaterial({color:'#e8c66a'})); own.rotation.x = Math.PI/2; own.position.y = .4;
+  const ward = new THREE.Mesh(G3.geo.ward, new THREE.MeshBasicMaterial({color:'#8cdcff', transparent:true, opacity:.8})); ward.rotation.x = Math.PI/2; ward.position.y = .5;
+  gr.add(base, pillar, orb, glow, own, ward); gr.position.set(l.x, 0, l.y);
+  G3.dyn.add(gr); const rec = {gr, orb, glow, own, ward, pillar}; G3.lm.set(l, rec); return rec;
+}
+function enMesh(e){
+  const THREE = T3, gr = new THREE.Group();
+  const b = new THREE.Mesh(G3.geo.en, new THREE.MeshLambertMaterial({color:'#1a0b24', emissive:'#2a0a3a'}));
+  const e1 = new THREE.Mesh(G3.geo.eye, new THREE.MeshBasicMaterial({color:'#ff7ad9'})), e2 = e1.clone();
+  e1.position.set(-.9, .5, 2.2); e2.position.set(.9, .5, 2.2);
+  gr.add(b, e1, e2); G3.dyn.add(gr); const rec = {gr}; G3.en.set(e, rec); return rec;
+}
+function camDist(){ return 420/S.cam.zoom; }
+function project3(x, y, h){
+  const v = G3.v.set(x, h, y).project(G3.camera);
+  if(v.z > 1) return [-9999, -9999];
+  return [(v.x + 1)/2*W, (1 - v.y)/2*H];
+}
+function unproject3(sx, sy){
+  G3.ray.setFromCamera({x:sx/W*2 - 1, y:-(sy/H*2 - 1)}, G3.camera);
+  const hit = new T3.Vector3();
+  return G3.ray.ray.intersectPlane(G3.plane, hit) ? [hit.x, hit.z] : [S.player.x, S.player.y];
+}
+function render3D(){
+  if(G3.dirty) build3D();
+  const p = S.player, cam = G3.camera, d = camDist(), tx = S.cam.x, tz = S.cam.y;
+  cam.position.set(tx + Math.sin(G3.yaw)*Math.cos(G3.pitch)*d, Math.sin(G3.pitch)*d, tz + Math.cos(G3.yaw)*Math.cos(G3.pitch)*d);
+  cam.lookAt(tx, 0, tz); cam.updateMatrixWorld(); G3.scene.fog.near = d*1.6; G3.scene.fog.far = d*5;
+  // player + rings
+  G3.player.position.set(p.x, 0, p.y); G3.player.rotation.y = Math.PI/2 - p.dir;
+  G3.act.position.set(p.x, .3, p.y); G3.act.material.color.set(S.mode === 'alert' && !S.vehicle ? '#ffbe50' : '#78b4ff');
+  G3.target.visible = p.tx != null; if(p.tx != null) G3.target.position.set(p.tx, .3, p.ty);
+  const osm = S.worldKind === 'osm';
+  G3.reach.visible = osm; G3.real.visible = osm && !p.linked;
+  if(osm){ const r = reachFor(p.rank); if(r !== G3.reachR){ G3.reach.geometry.dispose(); G3.reach.geometry = new T3.RingGeometry(r - .8, r + .8, 128); G3.reachR = r; } G3.reach.position.set(p.rx, .25, p.ry); G3.real.position.set(p.rx, .3, p.ry); }
+  // landmarks
+  for(const l of S.landmarks){
+    const r = G3.lm.get(l) || lmMesh(l), col = l.boss ? '#ff3b3b' : l.corrupted ? '#7a3cff' : l.fac ? FAC(l.fac).color : '#f2ecd6';
+    r.orb.material.color.set(col); r.glow.material.color.set(col);
+    r.gr.scale.setScalar(l.boss ? 2.8 : 1.8);
+    r.pillar.material.color.set(l.corrupted ? '#2a1640' : '#d8d0b8');
+    r.own.visible = isMine(l); r.own.material.color.set(l.team ? '#7be08a' : '#e8c66a');
+    r.ward.visible = l.ward > 0; r.ward.rotation.z = S.t;
+    if(r.bkey !== (l.builds || []).join()) buildMeshes(l, r);
+    if(r.bg) r.bg.traverse(o => { if(o.userData.spin){ o.rotation.y = S.t*2; o.position.y = 3 + Math.sin(S.t*2)*.4; } });
+    r.glow.scale.setScalar(2.4 + Math.sin(S.t*3)*.3 + (S.raid && S.raid.lm === l ? 1.5 + Math.sin(S.t*10) : 0));
+  }
+  for(const [l, r] of G3.lm) if(!S.landmarks.includes(l)){ G3.dyn.remove(r.gr); G3.lm.delete(l); }
+  // enemies
+  for(const e of S.enemies){ const r = G3.en.get(e) || enMesh(e); r.gr.position.set(e.x, 3.5 + Math.sin(S.t*3 + e.phase)*.8, e.y); r.gr.rotation.y = Math.atan2(p.x - e.x, p.y - e.y); }
+  for(const [e, r] of G3.en) if(!S.enemies.includes(e)){ G3.dyn.remove(r.gr); G3.en.delete(e); }
+  G3.renderer.render(G3.scene, cam);
+  // label overlay on the 2D canvas
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+  for(const l of S.landmarks){
+    const dd = dist(l.x, l.y, tx, tz); if(dd > d*1.8 && !isMine(l) && !l.boss) continue;
+    const [x, y] = project3(l.x, l.y, l.boss ? 34 : 24); if(x < -80 || x > W + 80 || y < -40 || y > H + 40) continue;
+    if(l.boss) label(x, y - 14, '☠ ' + l.boss, '#ff9a9a', 11.5, true);
+    if(S.raid && S.raid.lm === l) label(x, y - 28, '⚠ Raid in ' + Math.ceil(S.raid.t) + 's', '#ff8a8a', 12, true);
+    if(dd < d*1.2 || isMine(l) || l.boss) label(x, y, l.name + (l.corrupted ? ' (corrupted)' : ''), '#f6efd9', 11, false);
+  }
+  if(osm && !p.linked){ const [x, y] = project3(p.rx, p.ry, 3); label(x, y + 14, 'You (real)', '#cfe3ff', 10.5, false); }
+  if(osm){ const [x, y] = project3(p.rx, p.ry - reachFor(p.rank), 1); label(x, y - 8, `Reach ${reachFor(p.rank)} m · rank ${p.rank}`, '#cfe3ff', 11, true); }
+}
+
 /* ---------- main loop ---------- */
 let last = performance.now(), slow = 0, vehicleExit = 0;
 function update(dt){
@@ -1347,7 +1598,7 @@ function update(dt){
   for(const l of S.landmarks) if(l.ward > 0) l.ward = Math.max(0, l.ward - dt);
   // income
   S.incomeT += dt;
-  if(S.incomeT >= 10){ S.incomeT = 0; const n = S.landmarks.reduce((t, l) => t + myShare(l)*(l.fortress ? 3 : 1), 0); p.carry = (p.carry || 0) + n; if(p.carry >= 1){ p.coins += Math.floor(p.carry); p.carry -= Math.floor(p.carry); updateHud(); } }
+  if(S.incomeT >= 10){ S.incomeT = 0; const n = S.landmarks.reduce((t, l) => t + myShare(l)*((l.fortress ? 3 : 1) + (has(l, 'mint') ? 1 : 0)), 0); p.carry = (p.carry || 0) + n; if(p.carry >= 1){ p.coins += Math.floor(p.carry); p.carry -= Math.floor(p.carry); updateHud(); } }
   // AI factions shift the map
   S.aiT += dt;
   if(S.aiT > 25){ S.aiT = 0; const cand = S.landmarks.filter(l => !isMine(l) && !l.tutorial && !l.boss && !(l.ward > 0) && pdist(l) > 80); if(cand.length){ const l = pick(cand); const f = pick(FACTIONS); if(l.corrupted && Math.random() < .5){ l.corrupted = false; } l.fac = f.id; l.owner = pick(AI_NAMES); } }
@@ -1372,7 +1623,7 @@ function update(dt){
   }
   // raids
   const owned = S.landmarks.filter(isMine);
-  if(!S.raid && owned.length){ S.nextRaidIn -= dt; if(S.nextRaidIn <= 0){ S.raid = {lm: pick(owned), t: 60}; notify(`⚠ Raiders will strike ${S.raid.lm.name} in 60 s! Ward it or defend it.`, 'bad'); } }
+  if(!S.raid && owned.length){ S.nextRaidIn -= dt; if(S.nextRaidIn <= 0){ const lm = pick(owned), t = 60 + (has(lm, 'tower') ? 30 : 0); S.raid = {lm, t}; notify(`⚠ Raiders will strike ${lm.name} in ${t} s!${has(lm, 'tower') ? ' (Watchtower: +30 s warning)' : ''} Ward it or defend it.`, 'bad'); } }
   if(S.raid){ S.raid.t -= dt; if(!isMine(S.raid.lm)){ S.raid = null; } else if(S.raid.t <= 0) resolveRaid(); }
   // realm portal cooldown and invitations from players already inside other realms
   if(S.portalCD > 0) S.portalCD -= dt;
@@ -1390,7 +1641,7 @@ function update(dt){
   }
   slow += dt; if(slow > .4){ slow = 0; renderBanner(); renderRaidbar(); checkQuest(); }
 }
-function loop(t){ const dt = Math.min(.05, (t - last)/1000); last = t; try{ update(dt); render(); }catch(e){ console.error(e); } requestAnimationFrame(loop); }
+function loop(t){ const dt = Math.min(.05, (t - last)/1000); last = t; try{ update(dt); if(S.view3d && G3) render3D(); else render(); }catch(e){ console.error(e); } requestAnimationFrame(loop); }
 requestAnimationFrame(loop);
 signupStart();
 </script>
