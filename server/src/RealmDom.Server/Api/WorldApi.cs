@@ -19,10 +19,62 @@ public sealed record CaptureRequest(string Realm, PlayerRef Leader, IReadOnlyLis
 public sealed record BuildRequest(string Realm, string PlayerId, string Structure, long ExpectedVersion);
 public sealed record ProblemDto(string Reason, LandmarkDto? Landmark = null);
 
-/// <summary>Live updates: clients join the cells they can see and get every change in them.</summary>
-public sealed class WorldHub : Hub
+/// <summary>Live updates: clients join the cells they can see and get every change in them. Also carries phrase-only chat.</summary>
+public sealed class WorldHub(IWorldStore store, TimeProvider clock) : Hub
 {
     public static string Group(string realm, string cellId) => $"{realm}:{cellId}";
+    public static string FactionChat(string realm, string faction) => $"chat:{realm}:{faction}";
+    public static string CellChat(string realm, string cellId) => $"chat:{realm}:cell:{cellId}";
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTimeOffset> LastSent = new();
+    public static readonly TimeSpan MinGap = TimeSpan.FromSeconds(2);
+
+    /// <summary>Join your faction's channel for a realm (one faction channel per connection).</summary>
+    public async Task JoinFactionChat(string realm, string faction)
+    {
+        if (!Realms.IsValid(realm) || !Factions.IsValid(faction)) throw new HubException("Bad realm or faction.");
+        Context.Items["faction:" + realm] = faction;
+        await Groups.AddToGroupAsync(Context.ConnectionId, FactionChat(realm, faction));
+    }
+
+    /// <summary>Join the "nearby" channel of the cell you are in.</summary>
+    public async Task JoinCellChat(string realm, string cellId)
+    {
+        if (!Realms.IsValid(realm) || !Cells.IsValid(cellId)) throw new HubException("Bad realm or cell.");
+        if (Context.Items.TryGetValue("cell:" + realm, out var old) && old is string prev) await Groups.RemoveFromGroupAsync(Context.ConnectionId, CellChat(realm, prev));
+        Context.Items["cell:" + realm] = cellId;
+        await Groups.AddToGroupAsync(Context.ConnectionId, CellChat(realm, cellId));
+    }
+
+    /// <summary>
+    /// Send a phrase. <paramref name="channel"/> is "faction" or "nearby". Only phrase IDs are accepted, the tagged
+    /// place must be a real landmark, and each connection can send at most one message every two seconds.
+    /// </summary>
+    public async Task SendPhrase(string realm, string channel, string playerName, string phraseId, string? landmarkId)
+    {
+        if (!Realms.IsValid(realm)) throw new HubException("Bad realm.");
+        if (!ChatPhrases.All.TryGetValue(phraseId ?? "", out var phrase)) throw new HubException("Unknown phrase.");
+        if (!ChatPhrases.IsValidPlayerName(playerName)) throw new HubException("Bad player name.");
+        if (phrase.NeedsPlace != (landmarkId is not null)) throw new HubException(phrase.NeedsPlace ? "This phrase needs a tagged place." : "This phrase takes no place.");
+
+        var now = clock.GetUtcNow();
+        if (LastSent.TryGetValue(Context.ConnectionId, out var last) && now - last < MinGap) throw new HubException("Slow down a little.");
+        LastSent[Context.ConnectionId] = now;
+
+        string? faction = Context.Items.TryGetValue("faction:" + realm, out var f) ? f as string : null;
+        if (faction is null) throw new HubException("Join your faction chat first.");
+        string group = channel switch
+        {
+            "faction" => FactionChat(realm, faction),
+            "nearby" when Context.Items.TryGetValue("cell:" + realm, out var c) && c is string cell => CellChat(realm, cell),
+            _ => throw new HubException("Unknown channel, or not in a cell yet.")
+        };
+
+        Landmark? place = null;
+        if (landmarkId is not null && (place = await store.GetLandmarkAsync(landmarkId, Context.ConnectionAborted)) is null) throw new HubException("Only real landmarks can be tagged.");
+        await Clients.Group(group).SendAsync("chat", channel, new ChatMessage(playerName, faction, phrase.Id, place?.Id, place?.Name, place?.Lat, place?.Lon, now));
+    }
+
+    public override Task OnDisconnectedAsync(Exception? exception) { LastSent.TryRemove(Context.ConnectionId, out _); return base.OnDisconnectedAsync(exception); }
 
     public async Task JoinCells(string realm, string[] cellIds)
     {

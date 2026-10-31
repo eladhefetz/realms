@@ -87,6 +87,17 @@ label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
 .tools{display:flex;gap:6px}
 .tools button{flex:1;padding:9px 4px;font-size:13px;white-space:nowrap}
 .tools button.on{background:linear-gradient(#e8c66a,#c9a24a);color:#1b1408;border:none;font-weight:700}
+.chatlog{display:flex;flex-direction:column;gap:6px;max-height:34vh;overflow-y:auto;padding:8px;background:rgba(0,0,0,.25);border-radius:12px;margin:8px 0}
+.msg{font-size:13.5px;line-height:1.35;padding:6px 9px;border-radius:10px;background:rgba(255,255,255,.06);align-self:flex-start;max-width:88%}
+.msg.me{align-self:flex-end;background:rgba(232,198,106,.16)}
+.msg .who{font-weight:700;font-size:12px;margin-right:4px;cursor:pointer}
+.msg .place{display:inline-block;padding:1px 7px;border-radius:8px;background:rgba(140,200,255,.18);color:#cfe3ff;font-weight:600;cursor:pointer}
+.phr{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.phr button{padding:8px 10px;font-size:13px;border-radius:16px}
+.cats{display:flex;gap:6px;overflow-x:auto;margin-top:6px}
+.cats button{flex:none;padding:6px 10px;font-size:12.5px;border-radius:14px}
+.cats button.on,.tabs2 button.on{background:linear-gradient(#e8c66a,#c9a24a);color:#1b1408;border:none;font-weight:700}
+.tabs2{display:flex;gap:6px}.tabs2 button{flex:1;padding:8px;font-size:13px}
 #duel{position:fixed;inset:0;z-index:25;background:radial-gradient(ellipse at 50% 30%,#1f3524,#070b08 75%);display:none;flex-direction:column;padding:16px;padding-top:calc(16px + env(safe-area-inset-top))}
 .dhead{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--quiet)}
 .vs{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0}
@@ -133,7 +144,8 @@ label{font-size:13px;color:var(--quiet);display:block;margin:12px 0 6px}
 <div id="quest"></div>
 <div id="bottom">
   <button id="storeBtn">🏹 Store</button>
-  <button id="realmBtn">🌲 Realm</button>
+  <button id="realmBtn">🌲</button>
+  <button id="chatBtn" style="position:relative">💬<span id="chatBadge" style="display:none;position:absolute;top:-6px;right:-6px;background:#ff5a5a;color:#fff;border-radius:10px;font-size:11px;padding:1px 6px;font-weight:700"></span></button>
   <button id="helpBtn">📖</button>
   <button id="setBtn">⚙️</button>
   <div class="grow"></div>
@@ -619,7 +631,7 @@ function updateHud(){
   else if(S.mode === 'alert'){ mb.className = 'alert'; mb.textContent = '⚡ Alert'; }
   else { mb.className = 'shield'; mb.textContent = '🛡️ Shielded'; }
   store.set('player', {name:p.name, fac:p.fac, coins:p.coins, rank:p.rank, by:p.by, weapons:p.weapons, weapon:p.weapon, mats:p.mats, decor:p.decor, realms:Object.keys(S.realms).filter(k => S.realms[k].unlocked)});
-  $('#realmBtn').textContent = REALMS[S.realm].icon + ' Realm';
+  $('#realmBtn').textContent = REALMS[S.realm].icon;
 }
 
 /* ---------- signup flow ---------- */
@@ -756,6 +768,7 @@ function showRules(){
     <li><span>⚠️</span><div><b>Raids.</b> Your land gets raided, always with a countdown. Place a ward or defend it in person, or it becomes corrupted and unowned. Raids happen even in Shielded mode.</div></li>
     <li><span>🔨</span><div><b>Build.</b> On land you own, build up to 3 structures (5 on a fortress): Watchtower, Mint, Wall, Barracks, Ward Stone. They stay with the land: a rival who takes it gets them, a raid that corrupts it destroys them.</div></li>
     <li><span>🎨</span><div><b>Studio.</b> On land you own, buy materials with coins and build anything: blocks, floors, stairs, roofs, windows, doors, fences, plus decor like tables, lamps and beds. Creations add <b>prestige</b> (+coins) and stay with the land; a raid that corrupts the land crumbles about a third.</div></li>
+    <li><span>💬</span><div><b>Chat.</b> Pick from set phrases and tag public places, like "Help me conquer 📍 Old Oak". Allies who answer a call join your next battle there. No free typing, so no personal details can be shared.</div></li>
     <li><span>🤝</span><div><b>Allies.</b> Team up for a bonus, reinforce allied land (blocks rival factions for 3 minutes), and call allies into battles. ☠ Fortresses can only be taken by a team.</div></li>
     <li><span>📈</span><div><b>Rank (⚔️).</b> Wins add rank. Losing to a player or keeper costs 5; declining a challenge costs 3. Ties go to the defender. Rank unlocks weapons, extends reach and adds force.</div></li>
     <li><span>🪙</span><div><b>Coins.</b> Earned by playing; spent on wards, re-rolls, summons and weapons you've unlocked. Money never buys rank.</div></li>
@@ -814,6 +827,112 @@ function checkQuest(){
   }
 }
 $('#helpBtn').onclick = () => showRules();
+
+/* ---------- chat: set phrases only, with place tags ---------- */
+// Players can only pick from these phrases. There is no free text, so no personal details, links or insults can be sent.
+const PHRASES = {
+  hi:{c:'social', t:'Hi!'}, gg:{c:'social', t:'Good game!'}, thanks:{c:'social', t:'Thanks!'}, sorry:{c:'social', t:'Sorry!'}, nice:{c:'social', t:'Nice build!'},
+  yes:{c:'reply', t:'Yes'}, no:{c:'reply', t:'No'}, omw:{c:'reply', t:'On my way!'}, wait:{c:'reply', t:'Wait for me'}, later:{c:'reply', t:"Can't right now"},
+  join:{c:'team', t:'Join my team?'}, teamup:{c:'team', t:"Let's team up!"}, canjoin:{c:'team', t:'Can I join you?'}, follow:{c:'team', t:'Follow me'},
+  conquer:{c:'battle', t:'Help me conquer {place}!', place:true, call:true}, defend:{c:'battle', t:'Defend {place}!', place:true, call:true},
+  raid:{c:'battle', t:'Raid on {place}, need help!', place:true, call:true}, fortress:{c:'battle', t:'Fortress {place}: need a team!', place:true, call:true},
+  attack:{c:'battle', t:'Attack {place} in 5 minutes', place:true, call:true}, meet:{c:'battle', t:'Meet at {place}', place:true},
+  e_up:{c:'emote', t:'👍'}, e_party:{c:'emote', t:'🎉'}, e_shield:{c:'emote', t:'🛡️'}, e_swords:{c:'emote', t:'⚔️'}, e_laugh:{c:'emote', t:'😂'}, e_wave:{c:'emote', t:'👋'}
+};
+const PHRASE_CATS = [['battle', '⚔️ Battle'], ['team', '🤝 Team'], ['reply', '💬 Reply'], ['social', '🙂 Social'], ['emote', '😀 Emotes']];
+const CH = {log:{faction:[], nearby:[]}, tab:'faction', cat:'battle', unread:0, lastSent:0, muted:new Set(), aiT:35, open:false};
+function chatPost(ch, m){ const log = CH.log[ch]; log.push(m); if(log.length > 60) log.shift(); if(!m.me && !CH.open){ CH.unread++; badge(); notify(`💬 ${m.from}: ${phraseText(m)}`); } if(CH.open) renderChat(); }
+function badge(){ const b = $('#chatBadge'); b.style.display = CH.unread ? 'block' : 'none'; b.textContent = CH.unread > 9 ? '9+' : CH.unread; }
+function phraseText(m){ const p = PHRASES[m.id]; return p.t.replace('{place}', m.place ? m.place.name : 'a place'); }
+function phraseHtml(m){ const p = PHRASES[m.id]; return esc(p.t).replace('{place}', m.place ? `<span class="place" data-lx="${m.place.x}" data-ly="${m.place.y}">📍 ${esc(m.place.name)}</span>` : ''); }
+function renderChat(){
+  const el = $('#chatLog'); if(!el) return;
+  const log = CH.log[CH.tab].filter(m => !CH.muted.has(m.from));
+  el.innerHTML = log.length ? log.map(m => `<div class="msg ${m.me ? 'me' : ''}">${m.me ? '' : `<span class="who" data-who="${esc(m.from)}" style="color:${FAC(m.fac).color}">${esc(m.from)}</span>`}${phraseHtml(m)}</div>`).join('') : `<div class="note" style="text-align:center;margin:12px 0">No messages yet.</div>`;
+  el.scrollTop = el.scrollHeight;
+  $('#chatPhr').innerHTML = Object.entries(PHRASES).filter(([, p]) => p.c === CH.cat).map(([id, p]) => `<button data-p="${id}">${esc(p.t.replace('{place}', '📍…'))}</button>`).join('');
+  document.querySelectorAll('[data-cat]').forEach(b => b.classList.toggle('on', b.dataset.cat === CH.cat));
+  document.querySelectorAll('[data-ch]').forEach(b => b.classList.toggle('on', b.dataset.ch === CH.tab));
+}
+function openChat(){
+  CH.open = true; CH.unread = 0; badge();
+  const f = FAC(S.player.fac);
+  const sh = sheet(`<h2>💬 Chat</h2><p class="note" style="margin-top:0">Set phrases only: no typing, no personal details. Tap a 📍 place to go there.</p>
+    <div class="tabs2"><button data-ch="faction">${f.icon} ${f.name}</button><button data-ch="nearby">📍 Nearby (40 m)</button></div>
+    <div class="chatlog" id="chatLog"></div>
+    <div class="cats">${PHRASE_CATS.map(([k, n]) => `<button data-cat="${k}">${n}</button>`).join('')}</div>
+    <div class="phr" id="chatPhr"></div>
+    <div class="row"><button data-x="1">Close</button></div>`, () => { CH.open = false; });
+  renderChat();
+  sh.onclick = e => {
+    const t = e.target;
+    if(t.closest('[data-x]')){ CH.open = false; return closeSheet(); }
+    const ch = t.closest('[data-ch]'); if(ch){ CH.tab = ch.dataset.ch; return renderChat(); }
+    const cat = t.closest('[data-cat]'); if(cat){ CH.cat = cat.dataset.cat; return renderChat(); }
+    const pl = t.closest('.place'); if(pl){ CH.open = false; closeSheet(); const l = S.landmarks.find(x => x.x === +pl.dataset.lx && x.y === +pl.dataset.ly); if(l) pdist(l) <= RANGE ? openLandmark(l) : walkTo(l.x, l.y + 12); return; }
+    const who = t.closest('[data-who]'); if(who) return muteMenu(who.dataset.who);
+    const p = t.closest('[data-p]'); if(p) return sendPhrase(p.dataset.p);
+  };
+}
+function muteMenu(name){
+  CH.open = false;
+  const sh = sheet(`<h2>${esc(name)}</h2><div class="stack"><button data-a="mute">🔇 Mute ${esc(name)}</button><button data-a="report" class="danger">🚩 Report ${esc(name)}</button><button data-a="back">Back to chat</button></div>`);
+  sh.onclick = e => { const a = e.target.closest('button')?.dataset.a; if(!a) return;
+    if(a === 'mute'){ CH.muted.add(name); toast(`${name} is muted. You won't see their messages.`); }
+    if(a === 'report') toast(`Thanks. ${name} was reported to the moderation team.`);
+    openChat(); };
+}
+function sendPhrase(id){
+  if(S.vehicle) return toast('Chat is paused while you are in a vehicle.');
+  if(S.t - CH.lastSent < 2.5) return toast('Slow down a little.');
+  const p = PHRASES[id];
+  if(p.place) return pickPlace(l => post(id, l));
+  post(id, null);
+  function post(id, l){
+    CH.lastSent = S.t;
+    const m = {from:S.player.name, fac:S.player.fac, id, place:l ? {name:l.name, x:l.x, y:l.y} : null, me:true};
+    chatPost(CH.tab, m); aiReact(CH.tab, m, l);
+    if(!CH.open) openChat();
+  }
+}
+function pickPlace(done){
+  CH.open = false;
+  const list = S.landmarks.slice().sort((a, b) => pdist(a) - pdist(b)).slice(0, 14);
+  const sh = sheet(`<h2>📍 Tag a place</h2><p>Only public landmarks can be tagged. Your own position is never shared.</p><div class="stack">${list.map((l, i) => `<button data-i="${i}" style="text-align:left;display:flex;justify-content:space-between;gap:8px"><span>${l.boss ? '☠ ' : ''}${esc(l.name)}${isMine(l) ? ' · yours' : ''}</span><small style="color:var(--quiet)">${Math.round(pdist(l))} m</small></button>`).join('')}<button data-i="x">Cancel</button></div>`);
+  sh.onclick = e => { const b = e.target.closest('button'); if(!b) return; if(b.dataset.i === 'x') return openChat(); closeSheet(); done(list[+b.dataset.i]); };
+}
+// prototype: simulated players answer, and answer calls for help by joining the next battle there
+function aiReact(ch, m, l){
+  const p = PHRASES[m.id];
+  const pool = ch === 'faction' ? S.agents.filter(a => a.fac === S.player.fac) : S.agents.filter(a => pdist(a) < 60);
+  if(!pool.length) return;
+  if(p.call && l && ch === 'faction'){
+    const n = 1 + Math.floor(Math.random()*3), who = pool.slice().sort(() => Math.random() - .5).slice(0, n);
+    S.pledges = (S.pledges || []).filter(x => x.until > S.t);
+    who.forEach((a, i) => setTimeout(() => {
+      chatPost(ch, {from:a.name, fac:a.fac, id:pick(['omw', 'omw', 'e_swords', 'wait']), place:null});
+      S.pledges.push({lm:l, name:a.name, power:15 + a.skill*12, until:S.t + 180});
+      if(i === who.length - 1) notify(`📣 ${who.map(x => x.name).join(', ')} will join your next battle at ${l.name} (3 min).`, 'good');
+    }, 1500 + i*1400 + Math.random()*1200));
+    return;
+  }
+  const replies = {hi:['hi', 'e_wave'], gg:['gg', 'e_up'], thanks:['e_up', 'yes'], join:['yes', 'later'], teamup:['yes', 'omw'], canjoin:['yes', 'no'], follow:['omw', 'wait'], meet:['omw', 'later'], nice:['thanks'], sorry:['e_up']};
+  const opts = replies[m.id]; if(!opts || Math.random() < .25) return;
+  const a = pick(pool); setTimeout(() => chatPost(ch, {from:a.name, fac:a.fac, id:pick(opts), place:null}), 1500 + Math.random()*2500);
+}
+function aiChatter(dt){
+  CH.aiT -= dt; if(CH.aiT > 0 || S.busy) return;
+  CH.aiT = 45 + Math.random()*45;
+  const allies = S.agents.filter(a => a.fac === S.player.fac); if(!allies.length) return;
+  const a = pick(allies), own = S.landmarks.filter(l => l.fac === a.fac && !isMine(l)), any = S.landmarks.filter(l => !l.boss);
+  const r = Math.random();
+  if(r < .35 && own.length){ const l = pick(own); chatPost('faction', {from:a.name, fac:a.fac, id:'defend', place:{name:l.name, x:l.x, y:l.y}}); }
+  else if(r < .6 && any.length){ const l = pick(any); chatPost('faction', {from:a.name, fac:a.fac, id:pick(['meet', 'attack']), place:{name:l.name, x:l.x, y:l.y}}); }
+  else if(r < .75){ const f = S.landmarks.find(l => l.boss); if(f) chatPost('faction', {from:a.name, fac:a.fac, id:'fortress', place:{name:f.name, x:f.x, y:f.y}}); }
+  else chatPost('faction', {from:a.name, fac:a.fac, id:pick(['hi', 'teamup', 'gg', 'e_shield']), place:null});
+}
+$('#chatBtn').onclick = () => openChat();
+
 
 /* ---------- input ---------- */
 const ptrs = new Map(); let gesture = null;
@@ -928,7 +1047,7 @@ function openLandmark(l){
         win(){ takeLandmark(l); }, lose(){ notify('The guardian held. Try again!', 'bad'); }});
     }
     if(a === 'cleanse'){
-      startBattle({foe:pick(REALMS[S.realm].enemies), armor:25, title:'Cleanse ' + l.name, stakes:'Win: cleanse it and claim the land · Lose: nothing, try again', allies:true,
+      startBattle({lm:l, foe:pick(REALMS[S.realm].enemies), armor:25, title:'Cleanse ' + l.name, stakes:'Win: cleanse it and claim the land · Lose: nothing, try again', allies:true,
         win(team){ l.corrupted = false; takeLandmark(l, team); }, lose(){ notify('The corruption holds. Try again with more force.', 'bad'); }});
     }
     if(a === 'challenge'){
@@ -936,15 +1055,15 @@ function openLandmark(l){
         win(){ takeLandmark(l); }, lose(){ S.player.rank = Math.max(0, S.player.rank - 5); updateHud(); }});
     }
     if(a === 'battle'){
-      startBattle({foe:l.team ? `${l.owner}'s team` : l.owner, foeFac:l.fac, armor:keeperArmor(l), title:'Battle for ' + l.name, stakes:'Win: your team shares the land · Lose: −5 ⚔️', allies:true,
+      startBattle({lm:l, foe:l.team ? `${l.owner}'s team` : l.owner, foeFac:l.fac, armor:keeperArmor(l), title:'Battle for ' + l.name, stakes:'Win: your team shares the land · Lose: −5 ⚔️', allies:true,
         win(team){ takeLandmark(l, team); }, lose(){ S.player.rank = Math.max(0, S.player.rank - 5); updateHud(); }});
     }
     if(a === 'assault'){
-      startBattle({foe:l.boss, boss:true, armor:bossArmor(), title:'Assault ' + l.name, stakes:'Too strong to beat alone · Win: your team shares the fortress (3× income) · Lose: nothing', allies:true,
+      startBattle({lm:l, foe:l.boss, boss:true, armor:bossArmor(), title:'Assault ' + l.name, stakes:'Too strong to beat alone · Win: your team shares the fortress (3× income) · Lose: nothing', allies:true,
         win(team){ S.stats.fortress++; l.boss = null; l.fortress = true; takeLandmark(l, team, 120); }, lose(){ notify(`${l.boss} drove your team back. Bring more force.`, 'bad'); }});
     }
     if(a === 'defend'){
-      startBattle({foe:'Raiders', armor:30 - (has(l, 'wall') ? 10 : 0), garrison: has(l, 'barracks'), title:'Defend ' + l.name, stakes:'Win: raid stopped, +30 🪙 · Lose: the raid timer keeps running', allies:true,
+      startBattle({lm:l, foe:'Raiders', armor:30 - (has(l, 'wall') ? 10 : 0), garrison: has(l, 'barracks'), title:'Defend ' + l.name, stakes:'Win: raid stopped, +30 🪙 · Lose: the raid timer keeps running', allies:true,
         win(){ S.raid = null; S.nextRaidIn = 70 + Math.random()*40; S.player.coins += 30; S.player.rank += 8; updateHud(); notify('🛡️ Raid repelled! +30 🪙 +8 ⚔️', 'good'); renderRaidbar(); },
         lose(){ notify('The raiders pushed through — find another way before the timer ends!', 'bad'); }});
     }
@@ -1028,6 +1147,7 @@ function startBattle(o){
   S.busy = true; duel.style.display = 'flex';
   o.allies = o.allies ? [] : null; o.team = [{name:S.player.name, fac:S.player.fac}];
   if(o.garrison && o.allies) o.allies.push({name:'Garrison', power:20, garrison:true}, {name:'Garrison', power:20, garrison:true});
+  if(o.lm && o.allies){ const pl = (S.pledges || []).filter(x => x.lm === o.lm && x.until > S.t); pl.forEach(x => { if(!o.allies.some(a => a.name === x.name)) o.allies.push({name:x.name, power:x.power}); }); if(pl.length) setTimeout(() => toast(`📣 ${pl.map(x => x.name).join(', ')} answered your call and joined!`, 'good'), 300); }
   const foeCol = o.boss ? '#ff6b6b' : o.foeFac ? FAC(o.foeFac).color : '#c27bff';
   const prep = () => {
     const w = W_OF(S.player.weapon), mine = myForce(), allyF = (o.allies || []).reduce((t, a) => t + a.power, 0), total = mine + allyF;
@@ -1902,6 +2022,7 @@ function update(dt){
     S.challengeT -= dt;
     if(S.challengeT <= 0){ S.challengeT = 25 + Math.random()*20; const a = nearestAgent(); if(a && a.fac !== p.fac && a.mode === 'alert' && Math.random() < .55) incomingChallenge(a); }
   }
+  aiChatter(dt);
   // AI teammates sometimes ask to fight you for your share
   S.mateT = (S.mateT ?? 70) - dt;
   if(S.mateT <= 0 && !S.busy && !S.vehicle){

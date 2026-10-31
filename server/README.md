@@ -33,6 +33,9 @@ Opening a new city = adding its polygon. Cells outside every region answer `not-
 | POST | `/api/world/landmarks/{id}/capture` | Take a landmark (single player or team) |
 | POST | `/api/world/landmarks/{id}/build` | Build a structure on owned land |
 | GET | `/health` | Liveness |
+| Hub | `/hubs/world` | `JoinCells`, `JoinFactionChat`, `JoinCellChat`, `SendPhrase` |
+
+**Chat is phrase-only.** `SendPhrase(realm, channel, playerName, phraseId, landmarkId?)` accepts only IDs from `ChatPhrases.All` ("Help me conquer {place}!", "On my way!", emotes…) and only real landmark IDs as tagged places. No free text is ever accepted, so nobody can send phone numbers, addresses, links or insults; one message per 2 seconds per connection; channels are your faction (per realm) and the cell you are in.
 
 Capture and build enforce ownership rules on the server (fortresses need a team, no capturing your own faction's land, owners only build, slot limits). **Prototype limits:** there is no authentication yet and capture trusts the client's result; production must authenticate players and validate battles and duels on the server.
 
@@ -40,7 +43,7 @@ Capture and build enforce ownership rules on the server (fortresses need a team,
 
 ```bash
 cd server
-dotnet test                      # 18 tests: generation, generate-once under concurrency, restart persistence, live updates
+dotnet test                      # 21 tests: generation, generate-once under concurrency, restart persistence, live updates
 dotnet run --project src/RealmDom.Server --urls http://localhost:5080
 ```
 
