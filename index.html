@@ -326,12 +326,22 @@ function genDemoWorld(){
   return finishWorld(w);
 }
 
-async function genOsmWorld(lat, lon, lat0 = lat, lon0 = lon){
-  const r = 600;
+async function genOsmWorld(lat, lon, lat0 = lat, lon0 = lon, onStatus = null){
+  const r = 450;
   const q = `[out:json][timeout:25];(way["highway"](around:${r},${lat},${lon});way["building"](around:${r},${lat},${lon});way["leisure"~"park|garden"](around:${r+150},${lat},${lon});way["landuse"~"grass|forest|recreation_ground|meadow|village_green"](around:${r+150},${lat},${lon});way["natural"~"water|wood"](around:${r+150},${lat},${lon});way["waterway"](around:${r+150},${lat},${lon});node["amenity"="fountain"](around:${r},${lat},${lon});node["tourism"~"artwork|viewpoint|attraction"](around:${r},${lat},${lon});node["historic"](around:${r},${lat},${lon}););out geom;`;
-  const res = await fetch('https://overpass-api.de/api/interpreter', {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}});
-  if(!res.ok) throw new Error('map data ' + res.status);
-  const js = await res.json();
+  const servers = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+  let js = null, lastErr = 'no response';
+  for(const url of servers){
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
+    try{
+      if(onStatus) onStatus(`Loading your streets from ${new URL(url).host}…`);
+      const res = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q), headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal:ctl.signal});
+      if(!res.ok){ lastErr = `${new URL(url).host} answered ${res.status}${res.status === 429 ? ' (too busy)' : res.status === 504 ? ' (timed out)' : ''}`; continue; }
+      js = await res.json(); break;
+    }catch(e){ lastErr = `${new URL(url).host}: ${e.name === 'AbortError' ? 'timed out' : e.message}`; }
+    finally{ clearTimeout(timer); }
+  }
+  if(!js) throw new Error(lastErr);
   const k = Math.cos(lat0*Math.PI/180)*111320;
   const P = (la, lo) => [(lo-lon0)*k, -(la-lat0)*110540];
   const w = {lines:[], areas:[], landmarkSpots:[], spawn:P(lat, lon), named:[]};
@@ -639,23 +649,41 @@ function signupFaction(){
   $('#nx').onclick = () => { S.pending.fac = sel; S.pending.coins = 150; S.pending.rank = 0; signupWorld(); };
 }
 function signupWorld(){
+  const framed = (() => { try{ return window.self !== window.top; }catch(e){ return true; } })();
   scr.innerHTML = `<div class="signup"><div class="logo" style="font-size:28px">Enter the Forest Realm</div>
     <div class="stack">
-      <button class="primary" id="demo">🌲 Explore the demo village</button>
-      <button id="real">📍 Use my real streets</button>
+      <button class="primary" id="real">📍 Use my real streets</button>
+      <button id="demo">🌲 Explore the demo village</button>
     </div>
-    <div id="msg" class="note">Real streets need location access and live map data. Inside Claude these are blocked, so use the demo village here. Real streets work when this page is hosted on its own site.</div></div>`;
+    <div id="msg" class="note">${framed ? '⚠️ This page is running inside another app (like Claude), which blocks location and map data. For real streets, open <b>eladhefetz.github.io/realms</b> directly in Safari or Chrome.' : 'Real streets need location access. The first load can take up to 30 seconds.'}</div>
+    <div id="msgBtns" class="row" style="display:none"><button id="retry">Try again</button><button id="useDemo">Use demo village</button></div></div>`;
+  const msg = $('#msg'), btns = $('#msgBtns');
+  const fail = html => { msg.innerHTML = html; btns.style.display = 'flex'; $('#real').disabled = false; };
+  $('#useDemo').onclick = () => startGame(genDemoWorld(), 'demo');
   $('#demo').onclick = () => startGame(genDemoWorld(), 'demo');
-  $('#real').onclick = async () => {
-    const msg = $('#msg');
-    if(!navigator.geolocation){ msg.textContent = 'Location is not available here. Starting the demo village instead…'; return setTimeout(() => startGame(genDemoWorld(), 'demo'), 1400); }
-    msg.textContent = 'Asking for your location…';
-    navigator.geolocation.getCurrentPosition(async pos => {
-      msg.textContent = 'Loading your streets…';
-      try{ const w = await genOsmWorld(pos.coords.latitude, pos.coords.longitude); S.gps = {lat0:pos.coords.latitude, lon0:pos.coords.longitude, lat:pos.coords.latitude, lon:pos.coords.longitude, center:[0,0], loading:false}; startGame(w, 'osm'); }
-      catch(e){ msg.textContent = 'Could not load map data (' + e.message + '). Starting the demo village…'; setTimeout(() => startGame(genDemoWorld(), 'demo'), 1600); }
-    }, () => { msg.textContent = 'Location was blocked. Starting the demo village…'; setTimeout(() => startGame(genDemoWorld(), 'demo'), 1400); }, {enableHighAccuracy:true, timeout:10000});
+  const go = () => {
+    btns.style.display = 'none'; $('#real').disabled = true;
+    if(!window.isSecureContext) return fail('⚠️ Location only works on a secure (https) page.');
+    if(!navigator.geolocation) return fail('⚠️ This browser does not offer location.');
+    msg.textContent = '📍 Asking for your location… (allow it in the browser prompt)';
+    const gotPos = async pos => {
+      const {latitude:lat, longitude:lon, accuracy} = pos.coords;
+      msg.textContent = `📍 Found you (±${Math.round(accuracy)} m). Loading your streets…`;
+      try{
+        const w = await genOsmWorld(lat, lon, lat, lon, t => msg.textContent = t);
+        if(w.lines.filter(l => l.kind === 'road').length < 3) return fail('⚠️ The map server returned almost no streets for this spot. Try again in a minute, or use the demo village.');
+        S.gps = {lat0:lat, lon0:lon, lat, lon, center:[0,0], loading:false};
+        startGame(w, 'osm');
+      }catch(e){ fail(`⚠️ Your location worked, but the free map servers didn't answer (${esc(e.message)}). They are sometimes busy — try again in a minute.`); }
+    };
+    const posErr = (err, retried) => {
+      if(err.code === 1) return fail('⚠️ Location permission was denied. On iPhone: Settings → Privacy & Security → Location Services → Safari Websites → "While Using". On Android: tap the lock icon in the address bar → Permissions → Location. Then try again.');
+      if(!retried) return navigator.geolocation.getCurrentPosition(gotPos, e2 => posErr(e2, true), {enableHighAccuracy:false, timeout:20000, maximumAge:120000});
+      fail(err.code === 3 ? '⚠️ Getting your location took too long. Step outside or near a window and try again.' : '⚠️ Your phone could not determine your location. Check that Location Services are on, then try again.');
+    };
+    navigator.geolocation.getCurrentPosition(gotPos, e => posErr(e, false), {enableHighAccuracy:true, timeout:15000, maximumAge:30000});
   };
+  $('#real').onclick = go; $('#retry').onclick = go;
 }
 
 /* ---------- game start ---------- */
